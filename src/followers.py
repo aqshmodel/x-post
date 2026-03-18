@@ -34,7 +34,7 @@ def fetch_follower_count(account_name: str) -> Optional[dict]:
         return None
 
     acc = load_account(account_name)
-    user_id = acc.get("x_user_id") if isinstance(acc, dict) else getattr(acc, "x_user_id", "")
+    user_id = acc.x_user_id
 
     if not user_id:
         write_log(account_name, "フォロワー取得失敗: x_user_id未設定", level="ERROR")
