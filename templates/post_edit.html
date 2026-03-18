@@ -1,0 +1,470 @@
+{% extends "base.html" %}
+{% block title %}投稿編集 - {{ account.display_name }}{% endblock %}
+
+{% block content %}
+<div class="edit-layout">
+    <!-- 左カラム: 編集エリア -->
+    <div class="edit-column">
+        <h1>投稿編集 <span class="subtitle">{{ account.display_name }}</span></h1>
+
+        <form id="editForm">
+            <div class="form-group">
+                <label for="text">テキスト</label>
+                <textarea id="text" name="text" rows="14">{{ post.text }}</textarea>
+                <div class="char-bar">
+                    <div class="char-progress" id="charProgress"></div>
+                </div>
+                <div class="char-info">
+                    <span id="charCount">0</span>/280 <span class="char-unit">(全角140字 / 半角280字)</span>
+                    <span id="charStatus" class="char-ok">OK</span>
+                </div>
+            </div>
+
+            {% if post.status == 'scheduled' or post.status == 'draft' %}
+            <div class="form-row">
+                <div class="form-group form-group-half">
+                    <label for="scheduled_at">📅 予約時刻</label>
+                    <input type="datetime-local" id="scheduled_at" name="scheduled_at"
+                           value="{{ post.scheduled_at[:16] if post.scheduled_at else '' }}">
+                </div>
+                <div class="form-group form-group-half">
+                    <label>ステータス</label>
+                    <div class="status-display">
+                        <span class="badge badge-{{ post.status }}">{{ post.status }}</span>
+                        {% if post.error %}
+                        <p class="error-text">{{ post.error }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="form-actions">
+                {% if post.status == 'scheduled' or post.status == 'draft' %}
+                <button type="submit" class="btn btn-primary btn-lg">💾 保存</button>
+                {% endif %}
+                <a href="/ui/scheduled?account={{ account.account_name }}" class="btn btn-secondary btn-lg">← 予約一覧に戻る</a>
+            </div>
+        </form>
+    </div>
+
+    <!-- 右カラム: プレビュー -->
+    <div class="preview-column">
+        <h2>📱 プレビュー</h2>
+        <div class="tweet-preview">
+            <div class="tweet-header">
+                <div class="tweet-avatar">AP</div>
+                <div class="tweet-user">
+                    <div class="tweet-display-name">{{ account.display_name }}</div>
+                    <div class="tweet-username">{{ account.x_username }}</div>
+                </div>
+            </div>
+            <div class="tweet-body" id="previewBody">{{ post.text }}</div>
+            <div class="tweet-time" id="previewTime">
+                {{ post.scheduled_at[:16].replace('T', ' ') if post.scheduled_at else '' }}
+            </div>
+            <div class="tweet-actions-bar">
+                <span>💬</span>  <span>🔁</span>  <span>❤️</span>  <span>📊</span>  <span>↗</span>
+            </div>
+        </div>
+
+        <!-- リプライプレビュー -->
+        <div class="reply-indicator">↳ セルフリプライ</div>
+        <div class="tweet-preview tweet-reply">
+            <div class="tweet-header">
+                <div class="tweet-avatar tweet-avatar-sm">AP</div>
+                <div class="tweet-user">
+                    <div class="tweet-display-name">{{ account.display_name }}</div>
+                    <div class="tweet-username">{{ account.x_username }}</div>
+                </div>
+            </div>
+            <div class="tweet-body">
+                【無料】性格＆適性診断はこちら👇<br>
+                <a href="https://prisma.aqsh.co.jp/" class="tweet-link">prisma.aqsh.co.jp</a>
+            </div>
+        </div>
+
+        <div class="meta-info">
+            <div class="meta-item">
+                <span class="meta-label">ID</span>
+                <span class="meta-value">{{ post.id }}</span>
+            </div>
+            {% if post.x_post_id %}
+            <div class="meta-item">
+                <span class="meta-label">X投稿</span>
+                <a href="https://x.com/{{ account.x_username.replace('@','') }}/status/{{ post.x_post_id }}" target="_blank" class="tweet-link">
+                    投稿を見る ↗
+                </a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+/* ---- Edit Layout ---- */
+.edit-layout {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 2.5rem;
+    align-items: start;
+}
+
+@media (max-width: 900px) {
+    .edit-layout { grid-template-columns: 1fr; }
+}
+
+/* ---- Edit Column ---- */
+.edit-column h1 { margin-bottom: 1.5rem; }
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.form-group textarea {
+    width: 100%;
+    min-height: 280px;
+    padding: 16px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 1.05rem;
+    font-family: inherit;
+    line-height: 1.7;
+    resize: vertical;
+    transition: border-color 0.2s;
+}
+
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(29, 155, 240, 0.15);
+}
+
+.form-group input[type="datetime-local"] {
+    width: 100%;
+    padding: 12px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-family: inherit;
+}
+
+.form-group input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
+/* ---- Character Counter ---- */
+.char-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-top: 8px;
+    overflow: hidden;
+}
+
+.char-progress {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.2s, background 0.2s;
+}
+
+.char-info {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.char-ok { color: var(--success); font-weight: 600; }
+.char-warn { color: var(--warning); font-weight: 600; }
+.char-over { color: var(--danger); font-weight: 600; }
+
+/* ---- Form Row ---- */
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.status-display {
+    padding-top: 8px;
+}
+
+/* ---- Form Actions ---- */
+.form-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+}
+
+.btn-lg {
+    padding: 10px 24px;
+    font-size: 1rem;
+}
+
+.btn-secondary {
+    background: var(--bg-card);
+    color: var(--text-secondary);
+    text-decoration: none;
+    border: 1px solid var(--border);
+}
+
+.btn-secondary:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--text-secondary);
+}
+
+/* ---- Preview Column ---- */
+.preview-column h2 {
+    font-size: 1rem;
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+}
+
+.tweet-preview {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+}
+
+.tweet-reply {
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
+    border-top: none;
+    padding-top: 12px;
+}
+
+.reply-indicator {
+    background: var(--bg-card);
+    border-left: 1px solid var(--border);
+    border-right: 1px solid var(--border);
+    padding: 6px 16px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+.tweet-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.tweet-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), #7856ff);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+}
+
+.tweet-avatar-sm {
+    width: 32px;
+    height: 32px;
+    font-size: 0.7rem;
+}
+
+.tweet-display-name {
+    font-weight: 700;
+    font-size: 0.9rem;
+}
+
+.tweet-username {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+}
+
+.tweet-body {
+    white-space: pre-wrap;
+    word-break: break-word;
+    line-height: 1.6;
+    font-size: 0.95rem;
+    margin-bottom: 10px;
+}
+
+.tweet-time {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+}
+
+.tweet-actions-bar {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 16px;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.tweet-link {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.tweet-link:hover {
+    text-decoration: underline;
+}
+
+/* ---- Meta Info ---- */
+.meta-info {
+    margin-top: 1.5rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px 16px;
+}
+
+.meta-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 0;
+}
+
+.meta-item + .meta-item {
+    border-top: 1px solid var(--border);
+}
+
+.meta-label {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.meta-value {
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    word-break: break-all;
+    max-width: 250px;
+    text-align: right;
+}
+</style>
+
+<script>
+const textarea = document.getElementById('text');
+const counter = document.getElementById('charCount');
+const progress = document.getElementById('charProgress');
+const status = document.getElementById('charStatus');
+const preview = document.getElementById('previewBody');
+
+// X公式文字数カウント: 全角=2, 半角=1, URL=23固定, 上限280
+function countWeight(text) {
+    // URLを除去してウェイト加算
+    const urlPattern = /https?:\/\/\S+/g;
+    const urls = text.match(urlPattern) || [];
+    let urlWeight = urls.length * 23;
+    let cleaned = text.replace(urlPattern, '');
+
+    let weight = 0;
+    for (const char of cleaned) {
+        const cp = char.codePointAt(0);
+        // 絵文字
+        if (cp > 0xFFFF) { weight += 2; continue; }
+        // CJK記号・句読点、ひらがな、カタカナ、CJK統合漢字、全角ASCII
+        if ((cp >= 0x3000 && cp <= 0x303F) ||
+            (cp >= 0x3040 && cp <= 0x309F) ||
+            (cp >= 0x30A0 && cp <= 0x30FF) ||
+            (cp >= 0x4E00 && cp <= 0x9FFF) ||
+            (cp >= 0xFF00 && cp <= 0xFFEF) ||
+            (cp >= 0x2E80 && cp <= 0x2EFF) ||
+            (cp >= 0x3400 && cp <= 0x4DBF) ||
+            (cp >= 0xF900 && cp <= 0xFAFF)) {
+            weight += 2;
+        } else {
+            weight += 1;
+        }
+    }
+    return weight + urlWeight;
+}
+
+function updateCount() {
+    const w = countWeight(textarea.value);
+    const pct = Math.min((w / 280) * 100, 100);
+
+    counter.textContent = w;
+    progress.style.width = pct + '%';
+
+    if (w > 280) {
+        progress.style.background = '#f85149';
+        status.textContent = '超過';
+        status.className = 'char-over';
+    } else if (w > 240) {
+        progress.style.background = '#d29922';
+        status.textContent = 'あと' + (280 - w);
+        status.className = 'char-warn';
+    } else {
+        progress.style.background = '#1d9bf0';
+        status.textContent = 'OK';
+        status.className = 'char-ok';
+    }
+
+    // リアルタイムプレビュー
+    preview.textContent = textarea.value;
+}
+
+textarea.addEventListener('input', updateCount);
+updateCount();
+
+document.getElementById('editForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const text = textarea.value;
+    const scheduledAt = document.getElementById('scheduled_at')?.value || '';
+
+    const body = { text };
+    if (scheduledAt) body.scheduled_at = scheduledAt;
+
+    const res = await fetch('/api/posts/{{ post.status }}/{{ post.id }}?account={{ account.account_name }}', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+
+    if (res.ok) {
+        // 成功フィードバック
+        const btn = document.querySelector('button[type="submit"]');
+        btn.textContent = '✅ 保存しました';
+        btn.style.background = '#3fb950';
+        setTimeout(() => {
+            btn.textContent = '💾 保存';
+            btn.style.background = '';
+        }, 2000);
+    } else {
+        const err = await res.json();
+        alert('保存失敗: ' + (err.detail || '不明なエラー'));
+    }
+});
+</script>
+{% endblock %}

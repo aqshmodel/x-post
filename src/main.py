@@ -44,8 +44,8 @@ from src.scheduler import (
     schedule_post,
     cancel_scheduled_post,
     retry_failed_post,
-    schedule_analytics_fetch,
     schedule_monthly_archive,
+    schedule_auto_reply,
 )
 from src.analytics import (
     fetch_and_update,
@@ -65,6 +65,7 @@ async def lifespan(app: FastAPI):
     sched = init_scheduler()
     results = recover_jobs()
     schedule_monthly_archive()
+    schedule_auto_reply()
     print(f"[Scheduler] ジョブ復旧: 登録={results['registered']}, 即時実行={results['executed']}, 失敗={results['failed']}")
     yield
     # 終了
@@ -187,8 +188,6 @@ async def api_publish(req: PublishRequest):
     try:
         from src.x_client import publish_post
         result = publish_post(req.account, post)
-        # 分析取得をスケジュール
-        schedule_analytics_fetch(req.account, post_id)
         return result.model_dump()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -203,7 +202,9 @@ async def api_schedule(req: ScheduleRequest):
     if char_count > 280:
         raise HTTPException(status_code=400, detail=f"文字数超過: {char_count}/280文字")
 
-    if req.scheduled_at <= datetime.now():
+    # タイムゾーン対応の比較
+    now = datetime.now(req.scheduled_at.tzinfo) if req.scheduled_at.tzinfo else datetime.now()
+    if req.scheduled_at <= now:
         raise HTTPException(status_code=400, detail="予約時刻は未来でなければなりません")
 
     slug = req.text[:20].replace(" ", "-").replace("\n", "-")
@@ -263,10 +264,39 @@ async def api_retry_post(post_id: str, account: str = Query(...)):
         scheduled_file = get_account_dir(account) / "scheduled" / f"{post_id}.json"
         if scheduled_file.exists():
             scheduled_file.unlink()
-        schedule_analytics_fetch(account, post_id)
         return result.model_dump()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/posts/{status_dir}/{post_id}")
+async def api_update_post(status_dir: str, post_id: str, request: Request, account: str = Query(...)):
+    """投稿のテキスト・予約時刻を編集"""
+    body = await request.json()
+    try:
+        post_data = load_post_json(account, status_dir, post_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="ポストが見つかりません")
+
+    # テキスト更新
+    if "text" in body:
+        char_count = count_characters(body["text"])
+        if char_count > 280:
+            raise HTTPException(status_code=400, detail=f"文字数超過: {char_count}/280文字")
+        post_data["text"] = body["text"]
+
+    # 予約時刻更新
+    if "scheduled_at" in body and body["scheduled_at"]:
+        post_data["scheduled_at"] = body["scheduled_at"]
+        # スケジューラのジョブも再登録
+        if post_data.get("status") == "scheduled":
+            post = Post(**post_data)
+            schedule_post(account, post)
+
+    post_data["updated_at"] = datetime.now().isoformat()
+    save_post_json(account, status_dir, post_data)
+    write_log(account, f"投稿編集: {post_id}")
+    return {"status": "updated", "post_id": post_id}
 
 
 # ============================
@@ -295,19 +325,27 @@ async def api_analytics_post(account: str, post_id: str):
 
 @app.post("/api/analytics/{account}/fetch")
 async def api_analytics_fetch(account: str, post_id: Optional[str] = None):
-    """分析データ手動取得"""
+    """分析データ手動取得（直近10投稿）"""
     if post_id:
         result = fetch_and_update(account, post_id)
         return {"updated": 1, "post_id": post_id}
     else:
-        # 全投稿の分析を更新
+        # 直近10投稿のみ分析を更新（API費用節約）
         posted = list_posts(account, "posted")
+        # x_post_id がある投稿のみ、新しい順にソート
+        with_id = [p for p in posted if p.get("x_post_id")]
+        with_id.sort(key=lambda p: p.get("posted_at", ""), reverse=True)
+        recent = with_id[:10]
+
         updated = 0
-        for p in posted:
-            if p.get("x_post_id"):
+        errors = []
+        for p in recent:
+            try:
                 fetch_and_update(account, p["id"])
                 updated += 1
-        return {"updated": updated}
+            except Exception as e:
+                errors.append({"post_id": p["id"], "error": str(e)})
+        return {"updated": updated, "total": len(recent), "errors": errors}
 
 
 @app.get("/api/cost-history/{account}")
@@ -373,6 +411,8 @@ async def ui_dashboard(request: Request):
 async def ui_scheduled(request: Request, account: str = Query(...)):
     """予約一覧ページ"""
     posts = list_posts(account, "scheduled")
+    # 予約日時で昇順ソート（T/スペース混在を正規化）
+    posts.sort(key=lambda p: (p.get("scheduled_at", "") or "").replace("T", " ")[:16])
     acc = load_account(account)
     return templates.TemplateResponse("posts_scheduled.html", {
         "request": request,
@@ -384,10 +424,30 @@ async def ui_scheduled(request: Request, account: str = Query(...)):
     })
 
 
+@app.get("/ui/post/{status_dir}/{post_id}", response_class=HTMLResponse)
+async def ui_post_edit(request: Request, status_dir: str, post_id: str, account: str = Query(...)):
+    """投稿詳細・編集ページ"""
+    try:
+        post_data = load_post_json(account, status_dir, post_id)
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="ポストが見つかりません")
+    acc = load_account(account)
+    return templates.TemplateResponse("post_edit.html", {
+        "request": request,
+        "account": acc,
+        "post": post_data,
+        "accounts_list": list_accounts(),
+        "current_page": "scheduled",
+        "current_account": account,
+    })
+
+
 @app.get("/ui/history", response_class=HTMLResponse)
 async def ui_history(request: Request, account: str = Query(...)):
     """投稿履歴ページ"""
     posts = list_posts(account, "posted")
+    # 投稿日時で降順ソート（新しい投稿が上）
+    posts.sort(key=lambda p: p.get("posted_at", "") or "", reverse=True)
     acc = load_account(account)
     return templates.TemplateResponse("posts_history.html", {
         "request": request,

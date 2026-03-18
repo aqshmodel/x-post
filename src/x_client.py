@@ -213,3 +213,126 @@ def fetch_post_metrics(account_name: str, x_post_id: str) -> dict:
     if response.data and response.data.public_metrics:
         return response.data.public_metrics
     return {}
+
+
+def fetch_mentions(account_name: str, since_id: Optional[str] = None) -> list[dict]:
+    """
+    メンション（自分宛てのリプライ）を取得
+    ※PPUプランではBearer Token認証が必要
+    since_id: これより新しいツイートのみ取得
+    """
+    creds = get_env_credentials(account_name)
+    bearer_token = creds.get("bearer_token")
+    if not bearer_token:
+        write_log(account_name, "BEARER_TOKEN が未設定です", level="ERROR")
+        return []
+
+    # Bearer Token専用クライアント（メンション取得用）
+    client = tweepy.Client(bearer_token=bearer_token)
+
+    # user_idを取得（config.jsonから or OAuth 1.0a API経由）
+    from src.config import load_account
+    account = load_account(account_name)
+    user_id = account.x_user_id
+
+    if not user_id:
+        oauth_client = get_client(account_name)
+        me = oauth_client.get_me()
+        if me.data:
+            user_id = str(me.data.id)
+        else:
+            write_log(account_name, "ユーザーID取得失敗", level="ERROR")
+            return []
+
+    kwargs = {
+        "id": user_id,
+        "tweet_fields": ["created_at", "conversation_id", "in_reply_to_user_id", "author_id"],
+        "user_fields": ["username", "name"],
+        "expansions": ["author_id"],
+        "max_results": 20,
+    }
+    if since_id:
+        kwargs["since_id"] = since_id
+
+    try:
+        response = client.get_users_mentions(**kwargs)
+    except tweepy.TweepyException as e:
+        write_log(account_name, f"メンション取得失敗: {e}", level="ERROR")
+        return []
+
+    if not response.data:
+        return []
+
+    # ユーザー情報のマップを作成
+    users_map = {}
+    if response.includes and "users" in response.includes:
+        for u in response.includes["users"]:
+            users_map[str(u.id)] = {"username": u.username, "name": u.name}
+
+    mentions = []
+    for tweet in response.data:
+        author_info = users_map.get(str(tweet.author_id), {})
+        mentions.append({
+            "id": str(tweet.id),
+            "text": tweet.text,
+            "author_id": str(tweet.author_id),
+            "author_username": author_info.get("username", ""),
+            "author_name": author_info.get("name", ""),
+            "conversation_id": str(tweet.conversation_id) if tweet.conversation_id else None,
+            "in_reply_to_user_id": str(tweet.in_reply_to_user_id) if tweet.in_reply_to_user_id else None,
+            "created_at": tweet.created_at.isoformat() if tweet.created_at else None,
+        })
+
+    write_log(account_name, f"メンション取得: {len(mentions)}件 (since_id={since_id})")
+    return mentions
+
+
+def reply_to_tweet(account_name: str, tweet_id: str, text: str) -> Optional[str]:
+    """指定ツイートにリプライを投稿し、投稿IDを返す"""
+    _check_active(account_name)
+    client = get_client(account_name)
+
+    try:
+        response = client.create_tweet(
+            text=text,
+            in_reply_to_tweet_id=tweet_id,
+        )
+        reply_id = str(response.data["id"])
+        write_log(account_name, f"リプライ投稿成功: reply_to={tweet_id}, reply_id={reply_id}")
+        return reply_id
+    except tweepy.TweepyException as e:
+        write_log(account_name, f"リプライ投稿失敗: reply_to={tweet_id}, error={e}", level="ERROR")
+        return None
+
+
+def like_tweet(account_name: str, tweet_id: str) -> bool:
+    """ツイートにいいねする"""
+    _check_active(account_name)
+    client = get_client(account_name)
+
+    try:
+        client.like(tweet_id)
+        write_log(account_name, f"いいね成功: tweet_id={tweet_id}")
+        return True
+    except tweepy.TweepyException as e:
+        # 既にいいね済みの場合もエラーになるが、無視してOK
+        write_log(account_name, f"いいね失敗: tweet_id={tweet_id}, error={e}", level="WARN")
+        return False
+
+
+def get_tweet_text(account_name: str, tweet_id: str) -> Optional[str]:
+    """ツイートのテキストを取得（会話の文脈取得用）。Bearer Token認証。"""
+    creds = get_env_credentials(account_name)
+    bearer_token = creds.get("bearer_token")
+    if not bearer_token:
+        return None
+
+    client = tweepy.Client(bearer_token=bearer_token)
+    try:
+        response = client.get_tweet(tweet_id, tweet_fields=["text"])
+        if response.data:
+            return response.data.text
+    except tweepy.TweepyException as e:
+        write_log(account_name, f"ツイート取得失敗: tweet_id={tweet_id}, error={e}", level="WARN")
+    return None
+

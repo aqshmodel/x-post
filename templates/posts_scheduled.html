@@ -5,8 +5,13 @@
 <h1>予約一覧 <span class="subtitle">{{ account.display_name }}</span></h1>
 
 {% if posts %}
+<div class="search-bar">
+    <input type="text" id="searchInput" placeholder="テキストで検索..." oninput="filterRows()">
+    <span class="search-count" id="searchCount">{{ posts|length }}件</span>
+</div>
+
 <div class="table-wrapper">
-    <table class="table">
+    <table class="table" id="postsTable">
         <thead>
             <tr>
                 <th>テキスト</th>
@@ -18,10 +23,14 @@
         </thead>
         <tbody>
             {% for post in posts %}
-            <tr>
-                <td class="text-preview">{{ post.text[:80] }}{% if post.text|length > 80 %}...{% endif %}</td>
-                <td>{% if post.media %}📷 {{ post.media|length }}枚{% else %}-{% endif %}</td>
-                <td>{{ post.scheduled_at[:16] if post.scheduled_at else '-' }}</td>
+            <tr class="post-row">
+                <td class="text-preview">
+                    <a href="/ui/post/scheduled/{{ post.id }}?account={{ account.account_name }}" class="post-link">
+                        {{ post.text[:80] }}{% if post.text|length > 80 %}...{% endif %}
+                    </a>
+                </td>
+                <td>{% if post.media %}{{ post.media|length }}枚{% else %}-{% endif %}</td>
+                <td>{{ post.scheduled_at[:16].replace('T', ' ') if post.scheduled_at else '-' }}</td>
                 <td>
                     <span class="badge badge-{{ post.status }}">{{ post.status }}</span>
                     {% if post.error %}<p class="error-text">{{ post.error }}</p>{% endif %}
@@ -44,7 +53,45 @@
 {% endblock %}
 
 {% block scripts %}
+<style>
+.search-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 1rem;
+}
+.search-bar input {
+    flex: 1;
+    padding: 10px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 0.95rem;
+}
+.search-bar input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+.search-count {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+</style>
 <script>
+function filterRows() {
+    const q = document.getElementById('searchInput').value.toLowerCase();
+    const rows = document.querySelectorAll('#postsTable .post-row');
+    let visible = 0;
+    rows.forEach(row => {
+        const text = row.querySelector('.text-preview').textContent.toLowerCase();
+        const match = text.includes(q);
+        row.style.display = match ? '' : 'none';
+        if (match) visible++;
+    });
+    document.getElementById('searchCount').textContent = visible + '件';
+}
 async function cancelPost(postId) {
     if (!confirm('予約をキャンセルしますか？')) return;
     const res = await fetch(`/api/posts/scheduled/${postId}?account={{ account.account_name }}`, {method: 'DELETE'});

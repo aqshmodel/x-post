@@ -233,6 +233,16 @@ h2 {
     text-overflow: ellipsis;
 }
 
+.post-link {
+    color: var(--text-primary);
+    text-decoration: none;
+    transition: color 0.2s;
+}
+
+.post-link:hover {
+    color: var(--accent);
+}
+
 .error-text {
     color: var(--danger);
     font-size: 0.75rem;

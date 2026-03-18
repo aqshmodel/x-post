@@ -23,14 +23,22 @@ STATIC_DIR = BASE_DIR / "static"
 
 
 def list_accounts() -> list[str]:
-    """accounts/ 配下のアカウント名一覧を取得"""
+    """accounts/ 配下のアカウント名一覧を取得（hidden を除外）"""
     if not ACCOUNTS_DIR.exists():
         return []
-    return [
-        d.name
-        for d in ACCOUNTS_DIR.iterdir()
-        if d.is_dir() and not d.name.startswith(".")
-    ]
+    accounts = []
+    for d in ACCOUNTS_DIR.iterdir():
+        if not d.is_dir() or d.name.startswith("."):
+            continue
+        # hidden チェック
+        config_path = d / "config.json"
+        if config_path.exists():
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+            if config.get("hidden", False):
+                continue
+        accounts.append(d.name)
+    return accounts
 
 
 def load_account(account_name: str) -> Account:

@@ -4,6 +4,7 @@
   "x_username": "@example_user",
   "x_user_id": "",
   "active": true,
+  "hidden": true,
   "posting_rules": {
     "max_posts_per_day": 10,
     "default_language": "ja",

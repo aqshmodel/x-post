@@ -37,7 +37,9 @@ def get_scheduler() -> BackgroundScheduler:
 
 def _execute_post(account_name: str, post_id: str) -> None:
     """予約時刻に実行される投稿ジョブ"""
-    from src.x_client import publish_post
+    from src.x_client import publish_post, get_client
+    from src.config import load_account, get_account_dir as _get_dir
+    import json
 
     try:
         post_data = load_post_json(account_name, "scheduled", post_id)
@@ -51,12 +53,28 @@ def _execute_post(account_name: str, post_id: str) -> None:
             write_log(account_name, f"予約投稿スキップ (inactive): {post_id}", level="WARN")
             return
 
-        publish_post(account_name, post)
-        # publish_post 内で posted/ への移動とログ記録は完了
+        result = publish_post(account_name, post)
         # scheduled/ のファイルを削除
         scheduled_file = get_account_dir(account_name) / "scheduled" / f"{post_id}.json"
         if scheduled_file.exists():
             scheduled_file.unlink()
+
+        # セルフリプライ（投稿固有 > config.json のフォールバック）
+        if result.x_post_id:
+            # 投稿JSONに self_reply_text があればそれを優先
+            reply_text = post_data.get("self_reply_text") if post_data else None
+            if not reply_text:
+                config_path = _get_dir(account_name) / "config.json"
+                with open(config_path, "r", encoding="utf-8") as f:
+                    config = json.load(f)
+                reply_text = config.get("self_reply_text")
+            if reply_text:
+                try:
+                    client = get_client(account_name)
+                    client.create_tweet(text=reply_text, in_reply_to_tweet_id=result.x_post_id)
+                    write_log(account_name, f"セルフリプライ投稿: {post_id}")
+                except Exception as re:
+                    write_log(account_name, f"セルフリプライ失敗: {post_id}, error={re}", level="ERROR")
 
     except Exception as e:
         write_log(account_name, f"予約投稿失敗: {post_id}, error={e}", level="ERROR")
@@ -191,11 +209,20 @@ def recover_jobs() -> dict:
             if isinstance(scheduled_time, str):
                 scheduled_time = datetime.fromisoformat(scheduled_time)
 
-            if scheduled_time > now:
+            # タイムゾーン統一（offset-aware vs offset-naive の比較エラー回避）
+            if scheduled_time.tzinfo is not None:
+                from datetime import timezone
+                now_cmp = datetime.now(scheduled_time.tzinfo)
+                tolerance_cmp = now_cmp - timedelta(hours=PAST_JOB_TOLERANCE_HOURS)
+            else:
+                now_cmp = now
+                tolerance_cmp = tolerance
+
+            if scheduled_time > now_cmp:
                 # 未来: 通常登録
                 schedule_post(account_name, post)
                 results["registered"] += 1
-            elif scheduled_time >= tolerance:
+            elif scheduled_time >= tolerance_cmp:
                 # 1時間以内: 即座に実行
                 write_log(account_name, f"遅延投稿実行: {post.id} (予約: {scheduled_time})")
                 _execute_post(account_name, post.id)
@@ -268,3 +295,20 @@ def _monthly_archive_job() -> None:
             write_log(account_name, "月替わりアーカイブ完了")
         except Exception as e:
             write_log(account_name, f"月替わりアーカイブ失敗: error={e}", level="ERROR")
+
+
+def schedule_auto_reply() -> None:
+    """自動リプライの定期実行ジョブを登録（60分間隔、7:00-23:00）"""
+    from src.auto_reply import run_auto_reply_job
+
+    sched = get_scheduler()
+    sched.add_job(
+        run_auto_reply_job,
+        "cron",
+        minute=0,  # 毎時0分に実行
+        hour="7-22",  # 7:00〜22:00（23時台は22:00のジョブが最後）
+        id="auto_reply",
+        replace_existing=True,
+    )
+    print("[AutoReply] 自動リプライジョブ登録: 60分間隔 (7:00-22:00)")
+

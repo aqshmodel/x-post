@@ -4,6 +4,12 @@
 {% block content %}
 <h1>分析 <span class="subtitle">{{ account.display_name }}</span></h1>
 
+<div class="fetch-controls">
+    <button id="fetchBtn" class="btn btn-primary" onclick="fetchAnalytics()">📊 直近10投稿を分析</button>
+    <span id="fetchStatus" class="fetch-status"></span>
+    <p class="fetch-hint">ボタンを押すとX APIから直近10投稿のメトリクスを取得します（手動のみ・自動取得なし）</p>
+</div>
+
 <section class="section">
     <h2>当月サマリ</h2>
     <div class="stats-grid">
@@ -58,6 +64,63 @@
 {% endblock %}
 
 {% block scripts %}
+<style>
+.fetch-controls {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    margin-bottom: 2rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.fetch-hint {
+    width: 100%;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    margin-top: 0.25rem;
+}
+.fetch-status {
+    font-size: 0.9rem;
+}
+.fetch-status.loading { color: var(--accent); }
+.fetch-status.success { color: var(--success); }
+.fetch-status.error { color: var(--danger); }
+</style>
+<script>
+async function fetchAnalytics() {
+    const btn = document.getElementById('fetchBtn');
+    const st = document.getElementById('fetchStatus');
+    btn.disabled = true;
+    btn.textContent = '⏳ 取得中...';
+    st.textContent = 'X APIに問い合わせ中...';
+    st.className = 'fetch-status loading';
+
+    try {
+        const res = await fetch('/api/analytics/{{ account.account_name }}/fetch', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+            st.textContent = `✅ ${data.updated}/${data.total}件 取得完了`;
+            st.className = 'fetch-status success';
+            if (data.errors && data.errors.length > 0) {
+                st.textContent += `（${data.errors.length}件エラー）`;
+            }
+            // 2秒後にリロードして最新データを反映
+            setTimeout(() => location.reload(), 2000);
+        } else {
+            st.textContent = '❌ エラー: ' + (data.detail || '不明');
+            st.className = 'fetch-status error';
+        }
+    } catch (e) {
+        st.textContent = '❌ 通信エラー: ' + e.message;
+        st.className = 'fetch-status error';
+    }
+    btn.disabled = false;
+    btn.textContent = '📊 直近10投稿を分析';
+}
+</script>
 <script>
 const freq = {{ summary.posting_frequency | tojson }};
 new Chart(document.getElementById('frequencyChart'), {

@@ -5,13 +5,18 @@
 <h1>投稿履歴 <span class="subtitle">{{ account.display_name }}</span></h1>
 
 {% if posts %}
-<div class="posts-list">
+<div class="search-bar">
+    <input type="text" id="searchInput" placeholder="テキストで検索..." oninput="filterPosts()">
+    <span class="search-count" id="searchCount">{{ posts|length }}件</span>
+</div>
+
+<div class="posts-list" id="postsList">
     {% for post in posts %}
-    <div class="post-card">
+    <div class="post-card post-item">
         <div class="post-header">
             <span class="post-date">{{ post.posted_at[:16] if post.posted_at else post.created_at[:16] }}</span>
             {% if post.x_post_id %}
-            <a href="https://x.com/{{ account.x_username.replace('@','') }}/status/{{ post.x_post_id }}" target="_blank" class="x-link">Xで見る ↗</a>
+            <a href="https://x.com/{{ account.x_username.replace('@','') }}/status/{{ post.x_post_id }}" target="_blank" class="x-link">Xで見る</a>
             {% endif %}
         </div>
         <div class="post-body">
@@ -19,18 +24,18 @@
             {% if post.media %}
             <div class="post-media">
                 {% for img in post.media %}
-                <span class="media-tag">📷 {{ img.split('/')[-1] }}</span>
+                <span class="media-tag">{{ img.split('/')[-1] }}</span>
                 {% endfor %}
             </div>
             {% endif %}
         </div>
         <div class="post-metrics">
-            <span class="metric">❤️ {{ post.analytics.likes if post.analytics else 0 }}</span>
-            <span class="metric">🔄 {{ post.analytics.retweets if post.analytics else 0 }}</span>
-            <span class="metric">💬 {{ post.analytics.replies if post.analytics else 0 }}</span>
-            <span class="metric">👁 {{ post.analytics.impressions if post.analytics else 0 }}</span>
+            <span class="metric">{{ post.analytics.likes if post.analytics else 0 }} likes</span>
+            <span class="metric">{{ post.analytics.retweets if post.analytics else 0 }} RT</span>
+            <span class="metric">{{ post.analytics.replies if post.analytics else 0 }} replies</span>
+            <span class="metric">{{ post.analytics.impressions if post.analytics else 0 }} imp</span>
             {% if post.analytics and post.analytics.engagement_rate %}
-            <span class="metric highlight">📊 {{ post.analytics.engagement_rate }}%</span>
+            <span class="metric highlight">{{ post.analytics.engagement_rate }}%</span>
             {% endif %}
         </div>
     </div>
@@ -39,4 +44,47 @@
 {% else %}
 <p class="empty-state">投稿履歴はありません</p>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<style>
+.search-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 1rem;
+}
+.search-bar input {
+    flex: 1;
+    padding: 10px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--text-primary);
+    font-size: 0.95rem;
+}
+.search-bar input:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+.search-count {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+</style>
+<script>
+function filterPosts() {
+    const q = document.getElementById('searchInput').value.toLowerCase();
+    const items = document.querySelectorAll('#postsList .post-item');
+    let visible = 0;
+    items.forEach(item => {
+        const text = item.querySelector('.post-text').textContent.toLowerCase();
+        const match = text.includes(q);
+        item.style.display = match ? '' : 'none';
+        if (match) visible++;
+    });
+    document.getElementById('searchCount').textContent = visible + '件';
+}
+</script>
 {% endblock %}
