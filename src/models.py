@@ -176,6 +176,7 @@ class PublishRequest(BaseModel):
     account: str
     text: str
     media: list[str] = Field(default_factory=list)
+    auto_thread: bool = False
 
 
 class ScheduleRequest(BaseModel):

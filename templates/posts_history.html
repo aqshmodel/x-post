@@ -23,10 +23,13 @@
             <div class="hist-card__content">
                 <p class="hist-card__text">{{ post.text }}</p>
                 {% if post.media %}
-                <div class="hist-card__media-tags">
-                    {% for img in post.media %}
-                    <span class="hist-media-tag">{{ img.split('/')[-1][:20] }}</span>
+                <div class="thumb-row">
+                    {% for img in post.media[:3] %}
+                    <img class="thumb-img" src="/accounts-static/{{ account.account_name }}/images/{{ img.split('/')[-1] }}" alt="media">
                     {% endfor %}
+                    {% if post.media|length > 3 %}
+                    <span class="thumb-more">+{{ post.media|length - 3 }}</span>
+                    {% endif %}
                 </div>
                 {% endif %}
             </div>

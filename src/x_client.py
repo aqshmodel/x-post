@@ -20,6 +20,7 @@ from src.utils import (
     save_post_json,
     write_log,
 )
+from src.rate_limiter import check_rate_limit, update_from_response, RateLimitError
 
 
 def get_client(account_name: str) -> tweepy.Client:
@@ -94,12 +95,15 @@ def publish_post(account_name: str, post: Post) -> Post:
     """
     ポストを即時投稿する
     1. active チェック
-    2. メディアアップロード（あれば）
-    3. create_tweet 実行
-    4. api_cost 計算・記録
-    5. posted/ に移動 + ログ記録
+    2. レートリミットチェック
+    3. メディアアップロード（あれば）
+    4. create_tweet 実行
+    5. レートリミット記録
+    6. api_cost 計算・記録
+    7. posted/ に移動 + ログ記録
     """
     _check_active(account_name)
+    check_rate_limit(account_name, "tweets_create")
     client = get_client(account_name)
 
     # メディアアップロード
@@ -117,6 +121,7 @@ def publish_post(account_name: str, post: Post) -> Post:
             text=post.text,
             media_ids=media_ids,
         )
+        update_from_response(account_name, "tweets_create", response)
         post.x_post_id = str(response.data["id"])
         post.status = PostStatus.POSTED
         post.posted_at = datetime.now()
@@ -129,11 +134,16 @@ def publish_post(account_name: str, post: Post) -> Post:
             f"cost=${post.api_cost.total}",
         )
 
+    except RateLimitError:
+        post.status = PostStatus.FAILED
+        post.error = "レートリミット超過"
+        write_log(account_name, f"投稿停止: レートリミット超過 post_id={post.id}", level="ERROR")
+        save_post_json(account_name, "drafts", post.model_dump())
+        raise
     except tweepy.TweepyException as e:
         post.status = PostStatus.FAILED
         post.error = str(e)
         write_log(account_name, f"投稿失敗: post_id={post.id}, error={e}", level="ERROR")
-        # 失敗時は drafts/ に保存（呼び出し元がscheduledでもdraftでも安全）
         save_post_json(account_name, "drafts", post.model_dump())
         raise
 
@@ -149,12 +159,15 @@ def publish_thread(account_name: str, posts: list[Post]) -> list[Post]:
     途中失敗時: 投稿済み → posted/, 未投稿 → failed
     """
     _check_active(account_name)
+    check_rate_limit(account_name, "tweets_create")
     client = get_client(account_name)
     previous_id: Optional[str] = None
     published: list[Post] = []
 
     for i, post in enumerate(posts):
         try:
+            check_rate_limit(account_name, "tweets_create")
+
             # メディアアップロード
             media_ids = None
             if post.media:
@@ -172,6 +185,7 @@ def publish_thread(account_name: str, posts: list[Post]) -> list[Post]:
                 kwargs["in_reply_to_tweet_id"] = previous_id
 
             response = client.create_tweet(**kwargs)
+            update_from_response(account_name, "tweets_create", response)
             post.x_post_id = str(response.data["id"])
             post.status = PostStatus.POSTED
             post.posted_at = datetime.now()
@@ -189,7 +203,7 @@ def publish_thread(account_name: str, posts: list[Post]) -> list[Post]:
             if i < len(posts) - 1:
                 time.sleep(3)
 
-        except tweepy.TweepyException as e:
+        except (tweepy.TweepyException, RateLimitError) as e:
             # 残りを全て failed にマーク
             for remaining in posts[i:]:
                 remaining.status = PostStatus.FAILED

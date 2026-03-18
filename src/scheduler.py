@@ -312,3 +312,77 @@ def schedule_auto_reply() -> None:
     )
     print("[AutoReply] 自動リプライジョブ登録: 60分間隔 (7:00-22:00)")
 
+
+def schedule_follower_tracking() -> None:
+    """毎日 23:55 にフォロワー数を記録するジョブを登録"""
+    sched = get_scheduler()
+    sched.add_job(
+        _follower_tracking_job,
+        "cron",
+        hour=23,
+        minute=55,
+        id="follower_tracking",
+        replace_existing=True,
+    )
+    print("[Followers] フォロワートラッキングジョブ登録: 毎日 23:55")
+
+
+def _follower_tracking_job() -> None:
+    """フォロワー数記録ジョブの実行"""
+    from src.followers import save_follower_snapshot
+
+    for account_name in list_accounts():
+        try:
+            save_follower_snapshot(account_name)
+        except Exception as e:
+            write_log(account_name, f"フォロワー記録失敗: {e}", level="ERROR")
+
+
+def schedule_reports() -> None:
+    """週次・月次レポート生成ジョブを登録"""
+    sched = get_scheduler()
+
+    # 毎週月曜 00:10 に週次レポート
+    sched.add_job(
+        _weekly_report_job,
+        "cron",
+        day_of_week="mon",
+        hour=0,
+        minute=10,
+        id="weekly_report",
+        replace_existing=True,
+    )
+
+    # 毎月1日 00:15 に月次レポート
+    sched.add_job(
+        _monthly_report_job,
+        "cron",
+        day=1,
+        hour=0,
+        minute=15,
+        id="monthly_report",
+        replace_existing=True,
+    )
+    print("[Reports] レポートジョブ登録: 週次(月曜0:10), 月次(1日0:15)")
+
+
+def _weekly_report_job() -> None:
+    """週次レポートジョブの実行"""
+    from src.reports import generate_weekly_report
+
+    for account_name in list_accounts():
+        try:
+            generate_weekly_report(account_name)
+        except Exception as e:
+            write_log(account_name, f"週次レポート生成失敗: {e}", level="ERROR")
+
+
+def _monthly_report_job() -> None:
+    """月次レポートジョブの実行"""
+    from src.reports import generate_monthly_report
+
+    for account_name in list_accounts():
+        try:
+            generate_monthly_report(account_name)
+        except Exception as e:
+            write_log(account_name, f"月次レポート生成失敗: {e}", level="ERROR")

@@ -6,11 +6,19 @@
     <div>
         <h1 style="margin-bottom: 0;">予約一覧 <span class="subtitle">{{ account.display_name }}</span></h1>
     </div>
-    {% if posts %}
-    <span class="sched-total">{{ posts|length }}件</span>
-    {% endif %}
+    <div class="sched-header__right">
+        {% if posts %}
+        <span class="sched-total">{{ posts|length }}件</span>
+        {% endif %}
+        <div class="sched-view-toggle">
+            <button class="sched-toggle-btn sched-toggle-btn--active" id="btnList" onclick="switchView('list')">リスト</button>
+            <button class="sched-toggle-btn" id="btnCal" onclick="switchView('calendar')">カレンダー</button>
+        </div>
+    </div>
 </div>
 
+<!-- リスト表示 -->
+<div id="viewList">
 {% if posts %}
 <div class="sched-search">
     <input type="text" id="searchInput" placeholder="テキストで検索..." oninput="filterCards()">
@@ -34,7 +42,14 @@
                     <span class="sched-card__hour">{{ post.scheduled_at[11:16].replace('T','') if post.scheduled_at and post.scheduled_at|length > 11 else '' }}</span>
                 </div>
                 {% if post.media %}
-                <span class="sched-card__media">{{ post.media|length }}枚</span>
+                <div class="thumb-row">
+                    {% for img in post.media[:2] %}
+                    <img class="thumb-img" src="/accounts-static/{{ account.account_name }}/images/{{ img.split('/')[-1] }}" alt="media">
+                    {% endfor %}
+                    {% if post.media|length > 2 %}
+                    <span class="thumb-more">+{{ post.media|length - 2 }}</span>
+                    {% endif %}
+                </div>
                 {% endif %}
                 <span class="sched-badge sched-badge--{{ post.status }}">{{ post.status }}</span>
             </div>
@@ -55,28 +70,211 @@
 {% else %}
 <p class="empty-state">予約中の投稿はありません</p>
 {% endif %}
+</div>
+
+<!-- カレンダー表示 -->
+<div id="viewCalendar" style="display:none;">
+    <div class="cal-nav">
+        <button class="cal-nav__btn" id="calPrev" onclick="calMove(-1)">&lt;</button>
+        <span class="cal-nav__title" id="calTitle"></span>
+        <button class="cal-nav__btn" id="calNext" onclick="calMove(1)">&gt;</button>
+        <button class="cal-nav__today" onclick="calToday()">今日</button>
+    </div>
+    <div class="cal-grid">
+        <div class="cal-grid__head">月</div>
+        <div class="cal-grid__head">火</div>
+        <div class="cal-grid__head">水</div>
+        <div class="cal-grid__head">木</div>
+        <div class="cal-grid__head">金</div>
+        <div class="cal-grid__head">土</div>
+        <div class="cal-grid__head">日</div>
+    </div>
+    <div class="cal-grid" id="calBody" data-posts="{{ posts_json }}"></div>
+
+    <!-- ポップオーバー -->
+    <div class="cal-popover" id="calPopover" style="display:none;">
+        <div class="cal-popover__header">
+            <span id="calPopDate"></span>
+            <button class="cal-popover__close" onclick="closePop()">&times;</button>
+        </div>
+        <div class="cal-popover__body" id="calPopBody"></div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+// ---- 共通データ ----
+var postsData = JSON.parse(document.getElementById('calBody').dataset.posts || '[]');
+var accountName = '{{ account.account_name }}';
+
+// ---- リスト表示 ----
 function filterCards() {
-    const q = document.getElementById('searchInput').value.toLowerCase();
-    document.querySelectorAll('#schedList .post-card').forEach(card => {
-        const text = card.dataset.text;
+    var q = document.getElementById('searchInput').value.toLowerCase();
+    document.querySelectorAll('#schedList .post-card').forEach(function(card) {
+        var text = card.dataset.text;
         card.style.display = text.includes(q) ? '' : 'none';
     });
 }
+
 async function cancelPost(postId) {
     if (!confirm('予約をキャンセルしますか？')) return;
-    const res = await fetch(`/api/posts/scheduled/${postId}?account={{ account.account_name }}`, {method: 'DELETE'});
+    var res = await fetch('/api/posts/scheduled/' + postId + '?account=' + accountName, {method: 'DELETE'});
     if (res.ok) location.reload();
     else alert('キャンセルに失敗しました');
 }
+
 async function retryPost(postId) {
     if (!confirm('リトライしますか？')) return;
-    const res = await fetch(`/api/posts/retry/${postId}?account={{ account.account_name }}`, {method: 'POST'});
+    var res = await fetch('/api/posts/retry/' + postId + '?account=' + accountName, {method: 'POST'});
     if (res.ok) location.reload();
     else alert('リトライに失敗しました');
 }
+
+// ---- ビュー切り替え ----
+function switchView(mode) {
+    var isList = mode === 'list';
+    document.getElementById('viewList').style.display = isList ? '' : 'none';
+    document.getElementById('viewCalendar').style.display = isList ? 'none' : '';
+    document.getElementById('btnList').classList.toggle('sched-toggle-btn--active', isList);
+    document.getElementById('btnCal').classList.toggle('sched-toggle-btn--active', !isList);
+    if (!isList) renderCal();
+}
+
+// ---- カレンダー ----
+var calYear, calMonth;
+
+function calInit() {
+    var now = new Date();
+    calYear = now.getFullYear();
+    calMonth = now.getMonth();
+}
+
+function calMove(delta) {
+    calMonth += delta;
+    if (calMonth < 0) { calMonth = 11; calYear--; }
+    if (calMonth > 11) { calMonth = 0; calYear++; }
+    renderCal();
+}
+
+function calToday() {
+    var now = new Date();
+    calYear = now.getFullYear();
+    calMonth = now.getMonth();
+    renderCal();
+}
+
+function renderCal() {
+    closePop();
+    var titleEl = document.getElementById('calTitle');
+    var bodyEl = document.getElementById('calBody');
+    titleEl.textContent = calYear + '\u5e74' + (calMonth + 1) + '\u6708';
+
+    // 月の初日・最終日
+    var first = new Date(calYear, calMonth, 1);
+    var last = new Date(calYear, calMonth + 1, 0);
+    var startDow = (first.getDay() + 6) % 7; // 月曜=0
+    var daysInMonth = last.getDate();
+
+    // 今日の日付文字列
+    var today = new Date();
+    var todayStr = today.getFullYear() + '-' + String(today.getMonth()+1).padStart(2,'0') + '-' + String(today.getDate()).padStart(2,'0');
+
+    // 日ごとの投稿数を集計
+    var postsByDate = {};
+    postsData.forEach(function(p) {
+        var sa = (p.scheduled_at || '').replace('T', ' ').substring(0, 10);
+        if (!postsByDate[sa]) postsByDate[sa] = [];
+        postsByDate[sa].push(p);
+    });
+
+    var html = '';
+    // 空セル（月初の前）
+    for (var i = 0; i < startDow; i++) {
+        html += '<div class="cal-cell cal-cell--empty"></div>';
+    }
+    // 日セル
+    for (var d = 1; d <= daysInMonth; d++) {
+        var dateStr = calYear + '-' + String(calMonth + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+        var dayPosts = postsByDate[dateStr] || [];
+        var count = dayPosts.length;
+        var isToday = dateStr === todayStr;
+        var cls = 'cal-cell';
+        if (isToday) cls += ' cal-cell--today';
+        if (count > 0) cls += ' cal-cell--has-posts';
+
+        html += '<div class="' + cls + '" data-date="' + dateStr + '" onclick="showPop(this, \'' + dateStr + '\')">';
+        html += '<span class="cal-cell__day">' + d + '</span>';
+        if (count > 0) {
+            html += '<span class="cal-cell__dots">';
+            if (count <= 3) {
+                for (var j = 0; j < count; j++) html += '<span class="cal-dot"></span>';
+            } else {
+                html += '<span class="cal-count">' + count + '</span>';
+            }
+            html += '</span>';
+        }
+        html += '</div>';
+    }
+    // 残りの空セル
+    var totalCells = startDow + daysInMonth;
+    var remainder = totalCells % 7;
+    if (remainder > 0) {
+        for (var i = 0; i < 7 - remainder; i++) {
+            html += '<div class="cal-cell cal-cell--empty"></div>';
+        }
+    }
+
+    bodyEl.innerHTML = html;
+}
+
+function showPop(cellEl, dateStr) {
+    var postsByDate = {};
+    postsData.forEach(function(p) {
+        var sa = (p.scheduled_at || '').replace('T', ' ').substring(0, 10);
+        if (!postsByDate[sa]) postsByDate[sa] = [];
+        postsByDate[sa].push(p);
+    });
+
+    var dayPosts = postsByDate[dateStr] || [];
+    if (dayPosts.length === 0) { closePop(); return; }
+
+    var pop = document.getElementById('calPopover');
+    var popDate = document.getElementById('calPopDate');
+    var popBody = document.getElementById('calPopBody');
+
+    popDate.textContent = dateStr;
+
+    var html = '';
+    dayPosts.forEach(function(p) {
+        var time = (p.scheduled_at || '').replace('T', ' ').substring(11, 16);
+        html += '<a class="cal-pop-item" href="/ui/post/scheduled/' + p.id + '?account=' + accountName + '">';
+        html += '<span class="cal-pop-item__time">' + time + '</span>';
+        html += '<span class="cal-pop-item__text">' + (p.text || '').substring(0, 40) + '</span>';
+        html += '</a>';
+    });
+    popBody.innerHTML = html;
+
+    // ポップオーバーの位置
+    var rect = cellEl.getBoundingClientRect();
+    var scrollY = window.scrollY || document.documentElement.scrollTop;
+    pop.style.top = (rect.bottom + scrollY + 8) + 'px';
+    pop.style.left = Math.max(8, Math.min(rect.left, window.innerWidth - 320)) + 'px';
+    pop.style.display = '';
+}
+
+function closePop() {
+    document.getElementById('calPopover').style.display = 'none';
+}
+
+// 外側クリックで閉じる
+document.addEventListener('click', function(e) {
+    var pop = document.getElementById('calPopover');
+    if (pop.style.display !== 'none' && !pop.contains(e.target) && !e.target.closest('.cal-cell')) {
+        closePop();
+    }
+});
+
+calInit();
 </script>
 {% endblock %}

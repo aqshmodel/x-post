@@ -31,6 +31,18 @@
         <span class="dash-kpi__value">{{ item.total_posts }}</span>
         <span class="dash-kpi__label">累計投稿</span>
     </div>
+    {% if item.followers.current %}
+    <div class="dash-kpi">
+        <span class="dash-kpi__value">{{ item.followers.current }}</span>
+        <span class="dash-kpi__label">フォロワー
+            {% if item.followers.change_1d > 0 %}
+            <span class="dash-kpi__delta dash-kpi__delta--up">+{{ item.followers.change_1d }}</span>
+            {% elif item.followers.change_1d < 0 %}
+            <span class="dash-kpi__delta dash-kpi__delta--down">{{ item.followers.change_1d }}</span>
+            {% endif %}
+        </span>
+    </div>
+    {% endif %}
 </div>
 
 {# ── 次の投稿 ── #}
@@ -98,6 +110,45 @@
     </div>
 </div>
 
+{# ── レートリミット (データがあれば) ── #}
+{% if item.rate_limits %}
+<div class="dash-panel" style="margin-top: 0.75rem;">
+    <h3 class="dash-panel__title">API レートリミット</h3>
+    <div class="rate-gauges">
+        {% for endpoint, info in item.rate_limits.items() %}
+        <div class="rate-gauge">
+            <div class="rate-gauge__header">
+                <span class="rate-gauge__name">{{ endpoint }}</span>
+                <span class="rate-gauge__nums">{{ info.remaining }}/{{ info.limit }}</span>
+            </div>
+            <div class="rate-gauge__bar">
+                <div class="rate-gauge__fill rate-gauge__fill--{{ info.status }}" style="width: {{ info.percentage }}%"></div>
+            </div>
+            {% if info.reset_in %}
+            <span class="rate-gauge__reset">リセット: {{ info.reset_in }}秒</span>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+{# ── フォロワー推移 (データがあれば) ── #}
+{% if item.followers.history_7d %}
+<div class="dash-panel" style="margin-top: 0.75rem;">
+    <h3 class="dash-panel__title">フォロワー推移 (7日間)
+        {% if item.followers.change_7d > 0 %}
+        <span class="dash-kpi__delta dash-kpi__delta--up" style="font-size:0.8rem;">+{{ item.followers.change_7d }}</span>
+        {% elif item.followers.change_7d < 0 %}
+        <span class="dash-kpi__delta dash-kpi__delta--down" style="font-size:0.8rem;">{{ item.followers.change_7d }}</span>
+        {% endif %}
+    </h3>
+    <div style="height: 200px;">
+        <canvas id="followersChart_{{ loop.index }}"></canvas>
+    </div>
+</div>
+{% endif %}
+
 {# ── クイックリンク ── #}
 <div class="dash-links">
     <a href="/ui/scheduled?account={{ item.account.account_name }}" class="dash-link">予約一覧</a>
@@ -106,4 +157,53 @@
     <a href="/ui/cost-history?account={{ item.account.account_name }}" class="dash-link">コスト</a>
 </div>
 {% endfor %}
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+{% for item in accounts %}
+{% if item.followers.history_7d %}
+(function() {
+    var data = {{ item.followers.history_7d | tojson }};
+    var labels = data.map(function(d) { return d.date.substring(5); });
+    var values = data.map(function(d) { return d.followers; });
+    var ctx = document.getElementById('followersChart_{{ loop.index }}');
+    if (ctx) {
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'フォロワー',
+                    data: values,
+                    borderColor: '#1d9bf0',
+                    backgroundColor: 'rgba(29,155,240,0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#1d9bf0',
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: {
+                        grid: { color: 'rgba(255,255,255,0.06)' },
+                        ticks: { color: '#8b949e' }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#8b949e' }
+                    }
+                }
+            }
+        });
+    }
+})();
+{% endif %}
+{% endfor %}
+</script>
 {% endblock %}

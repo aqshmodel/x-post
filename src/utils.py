@@ -153,3 +153,82 @@ def write_log(account_name: str, message: str, level: str = "INFO") -> None:
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(log_file, "a", encoding="utf-8") as f:
         f.write(f"[{timestamp}] [{level}] {message}\n")
+
+
+def split_into_thread(text: str, max_weight: int = 280) -> list[str]:
+    """
+    テキストを max_weight 以内のチャンクに分割する。
+    分割優先順位: 改行 > 句点「。」> 読点「、」> スペース > 強制分割
+    280ウェイト以内ならそのまま1要素リストで返す。
+    """
+    text = text.strip()
+    if not text:
+        return []
+    if count_characters(text) <= max_weight:
+        return [text]
+
+    chunks: list[str] = []
+    remaining = text
+
+    while remaining:
+        remaining = remaining.strip()
+        if not remaining:
+            break
+        if count_characters(remaining) <= max_weight:
+            chunks.append(remaining)
+            break
+
+        # max_weight に収まる最長の部分を探す
+        best_pos = _find_split_position(remaining, max_weight)
+        chunk = remaining[:best_pos].rstrip()
+        if not chunk:
+            # 1文字も入らないケース（ありえないが安全策）
+            chunk = remaining[:1]
+            best_pos = 1
+        chunks.append(chunk)
+        remaining = remaining[best_pos:]
+
+    return chunks
+
+
+def _find_split_position(text: str, max_weight: int) -> int:
+    """
+    max_weight 以内に収まる最良の分割位置を返す。
+    分割優先順位: 改行 > 句点 > 読点 > スペース > 強制カット
+    """
+    # まず max_weight に収まる最大の文字位置を二分探索で見つける
+    lo, hi = 1, len(text)
+    max_pos = 1
+    while lo <= hi:
+        mid = (lo + hi) // 2
+        if count_characters(text[:mid]) <= max_weight:
+            max_pos = mid
+            lo = mid + 1
+        else:
+            hi = mid - 1
+
+    # max_pos の範囲内で最適な分割点を探す
+    search_range = text[:max_pos]
+
+    # 優先1: 改行
+    pos = search_range.rfind("\n")
+    if pos > 0:
+        return pos + 1  # 改行の直後で分割
+
+    # 優先2: 句点「。」
+    pos = search_range.rfind("。")
+    if pos > 0:
+        return pos + 1
+
+    # 優先3: 読点「、」
+    pos = search_range.rfind("、")
+    if pos > 0:
+        return pos + 1
+
+    # 優先4: スペース
+    pos = search_range.rfind(" ")
+    if pos > 0:
+        return pos + 1
+
+    # 優先5: 強制カット
+    return max_pos

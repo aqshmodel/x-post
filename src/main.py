@@ -39,6 +39,7 @@ from src.utils import (
     save_post_json,
     move_post,
     write_log,
+    split_into_thread,
 )
 from src.scheduler import (
     init_scheduler,
@@ -48,6 +49,8 @@ from src.scheduler import (
     retry_failed_post,
     schedule_monthly_archive,
     schedule_auto_reply,
+    schedule_follower_tracking,
+    schedule_reports,
 )
 from src.analytics import (
     fetch_and_update,
@@ -68,6 +71,8 @@ async def lifespan(app: FastAPI):
     results = recover_jobs()
     schedule_monthly_archive()
     schedule_auto_reply()
+    schedule_follower_tracking()
+    schedule_reports()
     print(f"[Scheduler] ジョブ復旧: 登録={results['registered']}, 即時実行={results['executed']}, 失敗={results['failed']}")
     yield
     # 終了
@@ -80,6 +85,7 @@ app = FastAPI(title="X投稿管理システム", version="1.0.0", lifespan=lifes
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 TEMPLATES_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+app.mount("/accounts-static", StaticFiles(directory=str(BASE_DIR / "accounts")), name="accounts-static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 
@@ -169,12 +175,32 @@ async def api_create_draft(req: PublishRequest):
 
 @app.post("/api/posts/publish")
 async def api_publish(req: PublishRequest):
-    """即時投稿"""
+    """即時投稿（auto_thread=trueで文字数超過時にスレッド自動分割）"""
     _check_active_or_403(req.account)
 
     char_count = count_characters(req.text)
+
+    # スレッド自動分割
     if char_count > 280:
-        raise HTTPException(status_code=400, detail=f"文字数超過: {char_count}/280文字")
+        if not req.auto_thread:
+            raise HTTPException(status_code=400, detail=f"文字数超過: {char_count}/280文字")
+        parts = split_into_thread(req.text)
+        posts = []
+        for i, part in enumerate(parts):
+            slug = part[:20].replace(" ", "-").replace("\n", "-")
+            post_id = generate_post_id(slug) + f"_t{i+1}"
+            posts.append(Post(
+                id=post_id, account=req.account, text=part,
+                media=req.media if i == 0 else [],
+                status=PostStatus.DRAFT,
+                thread_position=i,
+            ))
+        try:
+            from src.x_client import publish_thread
+            results = publish_thread(req.account, posts)
+            return [r.model_dump() for r in results]
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
     slug = req.text[:20].replace(" ", "-").replace("\n", "-")
     post_id = generate_post_id(slug)
@@ -377,6 +403,51 @@ async def api_cost_history(account: str):
     return history
 
 
+@app.get("/api/followers/{account}")
+async def api_followers(account: str, days: int = 30):
+    """フォロワー推移"""
+    from src.followers import load_follower_history, get_follower_summary
+    return {
+        "summary": get_follower_summary(account),
+        "history": load_follower_history(account, days=days),
+    }
+
+
+@app.post("/api/followers/{account}/fetch")
+async def api_followers_fetch(account: str):
+    """フォロワー数を即時取得して記録"""
+    from src.followers import save_follower_snapshot
+    result = save_follower_snapshot(account)
+    if result is None:
+        raise HTTPException(status_code=500, detail="フォロワー取得に失敗しました")
+    return result
+
+
+@app.get("/api/reports/{account}")
+async def api_reports_list(account: str):
+    """レポート一覧"""
+    from src.reports import list_reports
+    return list_reports(account)
+
+
+@app.post("/api/reports/{account}/generate")
+async def api_reports_generate(account: str, type: str = Query("weekly")):
+    """レポート手動生成 (type: weekly or monthly)"""
+    from src.reports import generate_weekly_report, generate_monthly_report
+    if type == "monthly":
+        path = generate_monthly_report(account)
+    else:
+        path = generate_weekly_report(account)
+    return {"path": path}
+
+
+@app.get("/api/rate-limits/{account}")
+async def api_rate_limits(account: str):
+    """レートリミット状態"""
+    from src.rate_limiter import get_rate_status
+    return get_rate_status(account)
+
+
 # ============================
 # 管理 UI ルート
 # ============================
@@ -456,6 +527,22 @@ async def ui_dashboard(request: Request):
                 except Exception:
                     pass
 
+            # --- フォロワーサマリ ---
+            follower_summary = {"current": None, "change_1d": 0, "change_7d": 0, "history_7d": []}
+            try:
+                from src.followers import get_follower_summary
+                follower_summary = get_follower_summary(name)
+            except Exception:
+                pass
+
+            # --- レートリミット ---
+            rate_status = {}
+            try:
+                from src.rate_limiter import get_rate_status
+                rate_status = get_rate_status(name)
+            except Exception:
+                pass
+
             accounts.append({
                 "account": acc,
                 "total_posts": len(posted),
@@ -469,6 +556,8 @@ async def ui_dashboard(request: Request):
                 "top_post": top_post,
                 "auto_reply": auto_reply_status,
                 "cost_usd": cost_usd,
+                "followers": follower_summary,
+                "rate_limits": rate_status,
             })
         except Exception:
             pass
@@ -489,10 +578,21 @@ async def ui_scheduled(request: Request, account: str = Query(...)):
     # 予約日時で昇順ソート（T/スペース混在を正規化）
     posts.sort(key=lambda p: (p.get("scheduled_at", "") or "").replace("T", " ")[:16])
     acc = load_account(account)
+    # カレンダーUI用の軽量JSON
+    posts_json = json.dumps([
+        {
+            "id": p.get("id", ""),
+            "text": (p.get("text", "") or "")[:40],
+            "scheduled_at": p.get("scheduled_at", ""),
+            "status": p.get("status", ""),
+        }
+        for p in posts
+    ], ensure_ascii=False)
     return templates.TemplateResponse("posts_scheduled.html", {
         "request": request,
         "account": acc,
         "posts": posts,
+        "posts_json": posts_json,
         "accounts_list": list_accounts(),
         "current_page": "scheduled",
         "current_account": account,
