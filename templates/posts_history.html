@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}投稿履歴 - {{ account.display_name }}{% endblock %}
+
+{% block content %}
+<h1>投稿履歴 <span class="subtitle">{{ account.display_name }}</span></h1>
+
+{% if posts %}
+<div class="posts-list">
+    {% for post in posts %}
+    <div class="post-card">
+        <div class="post-header">
+            <span class="post-date">{{ post.posted_at[:16] if post.posted_at else post.created_at[:16] }}</span>
+            {% if post.x_post_id %}
+            <a href="https://x.com/{{ account.x_username.replace('@','') }}/status/{{ post.x_post_id }}" target="_blank" class="x-link">Xで見る ↗</a>
+            {% endif %}
+        </div>
+        <div class="post-body">
+            <p class="post-text">{{ post.text }}</p>
+            {% if post.media %}
+            <div class="post-media">
+                {% for img in post.media %}
+                <span class="media-tag">📷 {{ img.split('/')[-1] }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        <div class="post-metrics">
+            <span class="metric">❤️ {{ post.analytics.likes if post.analytics else 0 }}</span>
+            <span class="metric">🔄 {{ post.analytics.retweets if post.analytics else 0 }}</span>
+            <span class="metric">💬 {{ post.analytics.replies if post.analytics else 0 }}</span>
+            <span class="metric">👁 {{ post.analytics.impressions if post.analytics else 0 }}</span>
+            {% if post.analytics and post.analytics.engagement_rate %}
+            <span class="metric highlight">📊 {{ post.analytics.engagement_rate }}%</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<p class="empty-state">投稿履歴はありません</p>
+{% endif %}
+{% endblock %}

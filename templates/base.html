@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}X投稿管理{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="header-inner">
+            <a href="/" class="logo">𝕏 投稿管理</a>
+            <nav class="nav">
+                <a href="/" class="nav-link {% if current_page == 'dashboard' %}active{% endif %}">ダッシュボード</a>
+                {% if current_account %}
+                <a href="/ui/scheduled?account={{ current_account }}" class="nav-link {% if current_page == 'scheduled' %}active{% endif %}">予約一覧</a>
+                <a href="/ui/history?account={{ current_account }}" class="nav-link {% if current_page == 'history' %}active{% endif %}">投稿履歴</a>
+                <a href="/ui/analytics?account={{ current_account }}" class="nav-link {% if current_page == 'analytics' %}active{% endif %}">分析</a>
+                <a href="/ui/cost-history?account={{ current_account }}" class="nav-link {% if current_page == 'cost-history' %}active{% endif %}">コスト</a>
+                {% endif %}
+            </nav>
+            {% if accounts_list %}
+            <div class="account-switcher">
+                <select onchange="switchAccount(this.value)" id="account-select">
+                    <option value="">アカウント選択</option>
+                    {% for name in accounts_list %}
+                    <option value="{{ name }}" {% if current_account == name %}selected{% endif %}>{{ name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+        </div>
+    </header>
+
+    <main class="main">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <p>X投稿管理システム v1.0</p>
+    </footer>
+
+    <script>
+    function switchAccount(name) {
+        if (!name) return;
+        const page = '{{ current_page }}';
+        const routes = {
+            'scheduled': '/ui/scheduled',
+            'history': '/ui/history',
+            'analytics': '/ui/analytics',
+            'cost-history': '/ui/cost-history',
+        };
+        const route = routes[page] || '/ui/history';
+        window.location.href = route + '?account=' + name;
+    }
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

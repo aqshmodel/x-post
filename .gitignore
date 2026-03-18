@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+
+# 環境変数
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ドキュメント（仕様・設計書はローカル管理）
+docs/
+
+# アカウントデータ（個人データ）
+accounts/*/drafts/
+accounts/*/scheduled/
+accounts/*/posted/
+accounts/*/images/
+accounts/*/analytics/
+accounts/*/logs/
+accounts/*/idea_notes/
+
+# アカウント設定（テンプレート以外）
+accounts/*/config.json
+accounts/*/character.md
+
+# ただしexampleのテンプレートは含める
+!accounts/example/config.json
+!accounts/example/character.md

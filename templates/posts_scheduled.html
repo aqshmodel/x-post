@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}予約一覧 - {{ account.display_name }}{% endblock %}
+
+{% block content %}
+<h1>予約一覧 <span class="subtitle">{{ account.display_name }}</span></h1>
+
+{% if posts %}
+<div class="table-wrapper">
+    <table class="table">
+        <thead>
+            <tr>
+                <th>テキスト</th>
+                <th>画像</th>
+                <th>予約時刻</th>
+                <th>ステータス</th>
+                <th>アクション</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for post in posts %}
+            <tr>
+                <td class="text-preview">{{ post.text[:80] }}{% if post.text|length > 80 %}...{% endif %}</td>
+                <td>{% if post.media %}📷 {{ post.media|length }}枚{% else %}-{% endif %}</td>
+                <td>{{ post.scheduled_at[:16] if post.scheduled_at else '-' }}</td>
+                <td>
+                    <span class="badge badge-{{ post.status }}">{{ post.status }}</span>
+                    {% if post.error %}<p class="error-text">{{ post.error }}</p>{% endif %}
+                </td>
+                <td>
+                    {% if post.status == 'scheduled' %}
+                    <button class="btn btn-sm btn-danger" onclick="cancelPost('{{ post.id }}')">キャンセル</button>
+                    {% elif post.status == 'failed' %}
+                    <button class="btn btn-sm btn-primary" onclick="retryPost('{{ post.id }}')">リトライ</button>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% else %}
+<p class="empty-state">予約中の投稿はありません</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function cancelPost(postId) {
+    if (!confirm('予約をキャンセルしますか？')) return;
+    const res = await fetch(`/api/posts/scheduled/${postId}?account={{ account.account_name }}`, {method: 'DELETE'});
+    if (res.ok) location.reload();
+    else alert('キャンセルに失敗しました');
+}
+async function retryPost(postId) {
+    if (!confirm('リトライしますか？')) return;
+    const res = await fetch(`/api/posts/retry/${postId}?account={{ account.account_name }}`, {method: 'POST'});
+    if (res.ok) location.reload();
+    else alert('リトライに失敗しました');
+}
+</script>
+{% endblock %}

@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}コスト履歴 - {{ account.display_name }}{% endblock %}
+
+{% block content %}
+<h1>コスト履歴 <span class="subtitle">{{ account.display_name }}</span></h1>
+
+<section class="section">
+    <h2>当月</h2>
+    <div class="stats-grid">
+        <div class="stat-card">
+            <span class="stat-value">${{ current_summary.api_cost.total_usd }}</span>
+            <span class="stat-label">USD</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-value">¥{{ current_summary.api_cost.total_jpy_approx }}</span>
+            <span class="stat-label">JPY (概算)</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-value">{{ current_summary.total_posts }}</span>
+            <span class="stat-label">投稿数</span>
+        </div>
+    </div>
+</section>
+
+{% if archives %}
+<section class="section">
+    <h2>月別コスト推移</h2>
+    <div class="chart-container">
+        <canvas id="costChart"></canvas>
+    </div>
+</section>
+
+<section class="section">
+    <h2>月別一覧</h2>
+    <div class="table-wrapper">
+        <table class="table">
+            <thead>
+                <tr><th>月</th><th>投稿数</th><th>コスト (USD)</th><th>コスト (JPY)</th></tr>
+            </thead>
+            <tbody>
+                {% for a in archives %}
+                <tr>
+                    <td>{{ a.month }}</td>
+                    <td>{{ a.total_posts }}</td>
+                    <td>${{ a.api_cost.total_usd if a.api_cost else 0 }}</td>
+                    <td>¥{{ a.api_cost.total_jpy_approx if a.api_cost else 0 }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% else %}
+<p class="empty-state">過去のコスト履歴はまだありません</p>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if archives %}
+<script>
+const archiveData = {{ archives | tojson }};
+const months = archiveData.map(a => a.month);
+const costs = archiveData.map(a => a.api_cost ? a.api_cost.total_usd : 0);
+const posts = archiveData.map(a => a.total_posts);
+
+new Chart(document.getElementById('costChart'), {
+    type: 'bar',
+    data: {
+        labels: months,
+        datasets: [
+            {
+                label: 'コスト ($)',
+                data: costs,
+                backgroundColor: 'rgba(255, 107, 107, 0.7)',
+                borderRadius: 6,
+                yAxisID: 'y',
+            },
+            {
+                label: '投稿数',
+                data: posts,
+                type: 'line',
+                borderColor: 'rgba(29, 155, 240, 1)',
+                backgroundColor: 'rgba(29, 155, 240, 0.1)',
+                tension: 0.3,
+                yAxisID: 'y1',
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        scales: {
+            y: { position: 'left', beginAtZero: true, ticks: { color: '#aaa' }, grid: { color: '#333' } },
+            y1: { position: 'right', beginAtZero: true, ticks: { color: '#aaa' }, grid: { display: false } },
+            x: { ticks: { color: '#aaa' }, grid: { display: false } }
+        },
+        plugins: { legend: { labels: { color: '#ccc' } } }
+    }
+});
+</script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}分析 - {{ account.display_name }}{% endblock %}
+
+{% block content %}
+<h1>分析 <span class="subtitle">{{ account.display_name }}</span></h1>
+
+<section class="section">
+    <h2>当月サマリ</h2>
+    <div class="stats-grid">
+        <div class="stat-card">
+            <span class="stat-value">{{ summary.total_posts }}</span>
+            <span class="stat-label">投稿数</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-value">{{ summary.avg_likes_per_post }}</span>
+            <span class="stat-label">平均いいね</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-value">{{ summary.avg_impressions_per_post }}</span>
+            <span class="stat-label">平均インプレッション</span>
+        </div>
+        <div class="stat-card">
+            <span class="stat-value">{{ summary.avg_engagement_rate }}%</span>
+            <span class="stat-label">平均エンゲージメント率</span>
+        </div>
+    </div>
+</section>
+
+{% if summary.best_performing_posts %}
+<section class="section">
+    <h2>トップポスト（エンゲージメント上位5）</h2>
+    <div class="table-wrapper">
+        <table class="table">
+            <thead>
+                <tr><th>ID</th><th>いいね</th><th>インプレッション</th><th>エンゲージメント率</th></tr>
+            </thead>
+            <tbody>
+                {% for p in summary.best_performing_posts %}
+                <tr>
+                    <td>{{ p.id }}</td>
+                    <td>{{ p.likes }}</td>
+                    <td>{{ p.impressions }}</td>
+                    <td>{{ p.engagement_rate }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endif %}
+
+<section class="section">
+    <h2>曜日別投稿頻度</h2>
+    <div class="chart-container">
+        <canvas id="frequencyChart"></canvas>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const freq = {{ summary.posting_frequency | tojson }};
+new Chart(document.getElementById('frequencyChart'), {
+    type: 'bar',
+    data: {
+        labels: ['月', '火', '水', '木', '金', '土', '日'],
+        datasets: [{
+            label: '投稿数',
+            data: [freq.mon, freq.tue, freq.wed, freq.thu, freq.fri, freq.sat, freq.sun],
+            backgroundColor: 'rgba(29, 155, 240, 0.7)',
+            borderRadius: 6,
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { display: false } },
+        scales: {
+            y: { beginAtZero: true, ticks: { stepSize: 1, color: '#aaa' }, grid: { color: '#333' } },
+            x: { ticks: { color: '#aaa' }, grid: { display: false } }
+        }
+    }
+});
+</script>
+{% endblock %}

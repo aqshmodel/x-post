@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+tweepy
+apscheduler
+pydantic
+python-dotenv
+pillow
+jinja2
