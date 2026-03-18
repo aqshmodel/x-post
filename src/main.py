@@ -344,8 +344,9 @@ async def api_cost_history(account: str):
 @app.get("/", response_class=HTMLResponse)
 async def ui_dashboard(request: Request):
     """ダッシュボード"""
+    all_accounts = list_accounts()
     accounts = []
-    for name in list_accounts():
+    for name in all_accounts:
         try:
             acc = load_account(name)
             posted = list_posts(name, "posted")
@@ -362,9 +363,9 @@ async def ui_dashboard(request: Request):
     return templates.TemplateResponse("dashboard.html", {
         "request": request,
         "accounts": accounts,
-        "accounts_list": list_accounts(),
+        "accounts_list": all_accounts,
         "current_page": "dashboard",
-        "current_account": list_accounts()[0] if list_accounts() else None,
+        "current_account": all_accounts[0] if all_accounts else None,
     })
 
 

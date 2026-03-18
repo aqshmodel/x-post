@@ -124,7 +124,7 @@ def update_daily_summary(account_name: str, date: Optional[str] = None) -> Daily
     all_posts = list_posts(account_name, "posted")
     day_posts = [
         p for p in all_posts
-        if p.get("posted_at", "").startswith(date)
+        if str(p.get("posted_at", "")).startswith(date)
     ]
 
     total_likes = sum(p.get("analytics", {}).get("likes", 0) for p in day_posts)
@@ -187,7 +187,7 @@ def update_monthly_summary(account_name: str) -> MonthlySummary:
     all_posts = list_posts(account_name, "posted")
     month_posts = [
         p for p in all_posts
-        if p.get("posted_at", "").startswith(month_str)
+        if str(p.get("posted_at", "")).startswith(month_str)
     ]
 
     total_likes = sum(p.get("analytics", {}).get("likes", 0) for p in month_posts)

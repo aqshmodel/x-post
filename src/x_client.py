@@ -5,6 +5,7 @@ X投稿システム X APIクライアント
 
 import os
 import time
+from datetime import datetime
 from typing import Optional
 
 import tweepy
@@ -108,7 +109,7 @@ def publish_post(account_name: str, post: Post) -> Post:
         )
         post.x_post_id = str(response.data["id"])
         post.status = PostStatus.POSTED
-        post.posted_at = __import__("datetime").datetime.now()
+        post.posted_at = datetime.now()
         post.api_cost = _calculate_api_cost(len(post.media))
         post.error = None
 
@@ -122,8 +123,8 @@ def publish_post(account_name: str, post: Post) -> Post:
         post.status = PostStatus.FAILED
         post.error = str(e)
         write_log(account_name, f"投稿失敗: post_id={post.id}, error={e}", level="ERROR")
-        # JSONを更新して保存（scheduled に残す）
-        save_post_json(account_name, "scheduled", post.model_dump())
+        # 失敗時は drafts/ に保存（呼び出し元がscheduledでもdraftでも安全）
+        save_post_json(account_name, "drafts", post.model_dump())
         raise
 
     # posted/ に保存
@@ -163,7 +164,7 @@ def publish_thread(account_name: str, posts: list[Post]) -> list[Post]:
             response = client.create_tweet(**kwargs)
             post.x_post_id = str(response.data["id"])
             post.status = PostStatus.POSTED
-            post.posted_at = __import__("datetime").datetime.now()
+            post.posted_at = datetime.now()
             post.api_cost = _calculate_api_cost(len(post.media))
             previous_id = post.x_post_id
             published.append(post)
