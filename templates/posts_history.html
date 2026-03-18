@@ -2,40 +2,65 @@
 {% block title %}投稿履歴 - {{ account.display_name }}{% endblock %}
 
 {% block content %}
-<h1>投稿履歴 <span class="subtitle">{{ account.display_name }}</span></h1>
-
-{% if posts %}
-<div class="search-bar">
-    <input type="text" id="searchInput" placeholder="テキストで検索..." oninput="filterPosts()">
-    <span class="search-count" id="searchCount">{{ posts|length }}件</span>
+<div class="hist-header">
+    <div>
+        <h1 style="margin-bottom: 0;">投稿履歴 <span class="subtitle">{{ account.display_name }}</span></h1>
+    </div>
+    {% if posts %}
+    <span class="sched-total">{{ posts|length }}件</span>
+    {% endif %}
 </div>
 
-<div class="posts-list" id="postsList">
+{% if posts %}
+<div class="sched-search">
+    <input type="text" id="searchInput" placeholder="テキストで検索..." oninput="filterPosts()">
+</div>
+
+<div class="hist-list" id="postsList">
     {% for post in posts %}
-    <div class="post-card post-item">
-        <div class="post-header">
-            <span class="post-date">{{ post.posted_at[:16] if post.posted_at else post.created_at[:16] }}</span>
-            {% if post.x_post_id %}
-            <a href="https://x.com/{{ account.x_username.replace('@','') }}/status/{{ post.x_post_id }}" target="_blank" class="x-link">Xで見る</a>
-            {% endif %}
-        </div>
-        <div class="post-body">
-            <p class="post-text">{{ post.text }}</p>
-            {% if post.media %}
-            <div class="post-media">
-                {% for img in post.media %}
-                <span class="media-tag">{{ img.split('/')[-1] }}</span>
-                {% endfor %}
+    <div class="hist-card post-item" data-text="{{ post.text[:200] | lower }}">
+        <div class="hist-card__main">
+            <div class="hist-card__content">
+                <p class="hist-card__text">{{ post.text }}</p>
+                {% if post.media %}
+                <div class="hist-card__media-tags">
+                    {% for img in post.media %}
+                    <span class="hist-media-tag">{{ img.split('/')[-1][:20] }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
             </div>
-            {% endif %}
+            <div class="hist-card__side">
+                <div class="hist-card__time">
+                    <span class="hist-card__date">{{ post.posted_at[:10] if post.posted_at else '' }}</span>
+                    <span class="hist-card__hour">{{ post.posted_at[11:16] if post.posted_at and post.posted_at|length > 11 else '' }}</span>
+                </div>
+                {% if post.x_post_id %}
+                <a href="https://x.com/{{ account.x_username.replace('@','') }}/status/{{ post.x_post_id }}" target="_blank" class="hist-xlink">Xで見る</a>
+                {% endif %}
+            </div>
         </div>
-        <div class="post-metrics">
-            <span class="metric">{{ post.analytics.likes if post.analytics else 0 }} likes</span>
-            <span class="metric">{{ post.analytics.retweets if post.analytics else 0 }} RT</span>
-            <span class="metric">{{ post.analytics.replies if post.analytics else 0 }} replies</span>
-            <span class="metric">{{ post.analytics.impressions if post.analytics else 0 }} imp</span>
+        <div class="hist-card__footer">
+            <div class="hist-metrics">
+                <span class="hist-metric">
+                    <span class="hist-metric__val">{{ post.analytics.likes if post.analytics else 0 }}</span>
+                    <span class="hist-metric__key">likes</span>
+                </span>
+                <span class="hist-metric">
+                    <span class="hist-metric__val">{{ post.analytics.retweets if post.analytics else 0 }}</span>
+                    <span class="hist-metric__key">RT</span>
+                </span>
+                <span class="hist-metric">
+                    <span class="hist-metric__val">{{ post.analytics.replies if post.analytics else 0 }}</span>
+                    <span class="hist-metric__key">replies</span>
+                </span>
+                <span class="hist-metric">
+                    <span class="hist-metric__val">{{ post.analytics.impressions if post.analytics else 0 }}</span>
+                    <span class="hist-metric__key">imp</span>
+                </span>
+            </div>
             {% if post.analytics and post.analytics.engagement_rate %}
-            <span class="metric highlight">{{ post.analytics.engagement_rate }}%</span>
+            <span class="hist-er">{{ post.analytics.engagement_rate }}%</span>
             {% endif %}
         </div>
     </div>
@@ -47,44 +72,13 @@
 {% endblock %}
 
 {% block scripts %}
-<style>
-.search-bar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 1rem;
-}
-.search-bar input {
-    flex: 1;
-    padding: 10px 14px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    color: var(--text-primary);
-    font-size: 0.95rem;
-}
-.search-bar input:focus {
-    outline: none;
-    border-color: var(--accent);
-}
-.search-count {
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    white-space: nowrap;
-}
-</style>
 <script>
 function filterPosts() {
     const q = document.getElementById('searchInput').value.toLowerCase();
-    const items = document.querySelectorAll('#postsList .post-item');
-    let visible = 0;
-    items.forEach(item => {
-        const text = item.querySelector('.post-text').textContent.toLowerCase();
-        const match = text.includes(q);
-        item.style.display = match ? '' : 'none';
-        if (match) visible++;
+    document.querySelectorAll('#postsList .post-item').forEach(item => {
+        const text = item.dataset.text;
+        item.style.display = text.includes(q) ? '' : 'none';
     });
-    document.getElementById('searchCount').textContent = visible + '件';
 }
 </script>
 {% endblock %}

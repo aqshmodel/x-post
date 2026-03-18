@@ -14,6 +14,7 @@ from typing import Optional
 import google.generativeai as genai
 
 from src.config import get_account_dir, is_account_active, list_accounts, load_character
+from src.models import ApiPricing
 from src.utils import write_log
 from src.x_client import fetch_mentions, reply_to_tweet, like_tweet, get_tweet_text
 
@@ -38,6 +39,34 @@ def _save_state(account_name: str, state: dict) -> None:
     state["updated_at"] = datetime.now().isoformat()
     with open(path, "w", encoding="utf-8") as f:
         json.dump(state, f, ensure_ascii=False, indent=2)
+
+
+def _get_cost_log_path(account_name: str) -> Path:
+    """日次のauto_replyコストログファイルパス"""
+    today = datetime.now().strftime("%Y-%m-%d")
+    return get_account_dir(account_name) / "analytics" / "daily" / f"auto_reply_cost_{today}.json"
+
+
+def _record_cost(account_name: str, cost: float, operation: str) -> None:
+    """auto_replyのAPI操作コストを日次ログに蓄積"""
+    path = _get_cost_log_path(account_name)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    if path.exists():
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    else:
+        data = {"date": datetime.now().strftime("%Y-%m-%d"), "total": 0.0, "operations": []}
+
+    data["total"] = round(data["total"] + cost, 4)
+    data["operations"].append({
+        "time": datetime.now().strftime("%H:%M:%S"),
+        "operation": operation,
+        "cost": cost,
+    })
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
 
 # --- x_user_id 自動取得・保存 ---
@@ -194,6 +223,7 @@ def process_auto_replies(account_name: str) -> dict:
 
     # メンション取得
     mentions = fetch_mentions(account_name, since_id=last_mention_id)
+    _record_cost(account_name, ApiPricing.MENTION_READ, "mention_read")
     result["checked"] = len(mentions)
 
     if not mentions:
@@ -218,9 +248,12 @@ def process_auto_replies(account_name: str) -> dict:
         # === いいねを返す ===
         if like_tweet(account_name, mention_id):
             result["liked"] += 1
+            _record_cost(account_name, ApiPricing.LIKE, f"like:{mention_id}")
 
         # === 元投稿の文脈を取得 ===
         original_context = _get_original_context(account_name, mention)
+        if original_context:
+            _record_cost(account_name, ApiPricing.TWEET_READ, f"tweet_read:{mention.get('conversation_id', '')}")
 
         # === 返信テキスト生成 ===
         reply_text = _generate_reply_text(
@@ -240,6 +273,7 @@ def process_auto_replies(account_name: str) -> dict:
         reply_id = reply_to_tweet(account_name, mention_id, reply_text)
         if reply_id:
             result["replied"] += 1
+            _record_cost(account_name, ApiPricing.REPLY, f"reply:{mention_id}")
             write_log(
                 account_name,
                 f"自動リプライ: @{mention.get('author_username', '?')} → {reply_text[:40]}...",

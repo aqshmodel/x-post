@@ -26,10 +26,14 @@ class ApiCost(BaseModel):
     media_upload: float = 0.0
     analytics_reads: float = 0.0
     deletions: float = 0.0
+    auto_reply: float = 0.0
     total: float = 0.0
 
     def calculate_total(self) -> None:
-        self.total = round(self.post + self.media_upload + self.analytics_reads + self.deletions, 4)
+        self.total = round(
+            self.post + self.media_upload + self.analytics_reads
+            + self.deletions + self.auto_reply, 4
+        )
 
 
 class ApiCostSummary(BaseModel):
@@ -198,3 +202,8 @@ class ApiPricing:
     MEDIA_UPLOAD = 0.005
     POST_READ = 0.005
     POST_DELETE = 0.005
+    # 自動リプライ関連
+    MENTION_READ = 0.001
+    TWEET_READ = 0.001
+    LIKE = 0.001
+    REPLY = 0.010  # POST_CREATEと同じ

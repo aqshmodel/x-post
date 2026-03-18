@@ -47,6 +47,16 @@ def _check_active(account_name: str) -> None:
         raise PermissionError(f"アカウント '{account_name}' は無効化されています (active: false)")
 
 
+def get_bearer_client(account_name: str) -> Optional[tweepy.Client]:
+    """PPUプランの読み取り専用 Bearer Token クライアントを生成"""
+    creds = get_env_credentials(account_name)
+    bearer_token = creds.get("bearer_token")
+    if not bearer_token:
+        write_log(account_name, "BEARER_TOKEN が未設定です", level="ERROR")
+        return None
+    return tweepy.Client(bearer_token=bearer_token)
+
+
 def upload_media(account_name: str, file_paths: list[str]) -> list[str]:
     """
     画像ファイルをアップロードし media_ids を返す
@@ -204,8 +214,11 @@ def delete_post(account_name: str, x_post_id: str) -> None:
 
 
 def fetch_post_metrics(account_name: str, x_post_id: str) -> dict:
-    """ポストの public_metrics を取得"""
-    client = get_client(account_name)
+    """ポストの public_metrics を取得（Bearer Token認証）"""
+    client = get_bearer_client(account_name)
+    if not client:
+        return {}
+
     response = client.get_tweet(
         x_post_id,
         tweet_fields=["public_metrics", "created_at"],
@@ -221,14 +234,9 @@ def fetch_mentions(account_name: str, since_id: Optional[str] = None) -> list[di
     ※PPUプランではBearer Token認証が必要
     since_id: これより新しいツイートのみ取得
     """
-    creds = get_env_credentials(account_name)
-    bearer_token = creds.get("bearer_token")
-    if not bearer_token:
-        write_log(account_name, "BEARER_TOKEN が未設定です", level="ERROR")
+    client = get_bearer_client(account_name)
+    if not client:
         return []
-
-    # Bearer Token専用クライアント（メンション取得用）
-    client = tweepy.Client(bearer_token=bearer_token)
 
     # user_idを取得（config.jsonから or OAuth 1.0a API経由）
     from src.config import load_account
@@ -322,12 +330,10 @@ def like_tweet(account_name: str, tweet_id: str) -> bool:
 
 def get_tweet_text(account_name: str, tweet_id: str) -> Optional[str]:
     """ツイートのテキストを取得（会話の文脈取得用）。Bearer Token認証。"""
-    creds = get_env_credentials(account_name)
-    bearer_token = creds.get("bearer_token")
-    if not bearer_token:
+    client = get_bearer_client(account_name)
+    if not client:
         return None
 
-    client = tweepy.Client(bearer_token=bearer_token)
     try:
         response = client.get_tweet(tweet_id, tweet_fields=["text"])
         if response.data:
@@ -335,4 +341,3 @@ def get_tweet_text(account_name: str, tweet_id: str) -> Optional[str]:
     except tweepy.TweepyException as e:
         write_log(account_name, f"ツイート取得失敗: tweet_id={tweet_id}, error={e}", level="WARN")
     return None
-

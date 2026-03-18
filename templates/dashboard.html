@@ -2,33 +2,108 @@
 {% block title %}ダッシュボード - X投稿管理{% endblock %}
 
 {% block content %}
-<h1>ダッシュボード</h1>
+{% for item in accounts %}
+<div class="dash-header">
+    <div>
+        <h1 style="margin-bottom: 0.25rem;">{{ item.account.display_name or item.account.account_name }}</h1>
+        <span class="dash-username">{{ item.account.x_username }}</span>
+    </div>
+    <span class="dash-status {% if item.account.active %}dash-status--on{% else %}dash-status--off{% endif %}">
+        {{ 'Active' if item.account.active else 'Inactive' }}
+    </span>
+</div>
 
-<section class="section">
-    <h2>アカウント一覧</h2>
-    <div class="card-grid">
-        {% for item in accounts %}
-        <div class="card">
-            <div class="card-header">
-                <span class="account-name">{{ item.account.display_name or item.account.account_name }}</span>
-                <span class="badge {% if item.account.active %}badge-active{% else %}badge-inactive{% endif %}">
-                    {{ 'Active' if item.account.active else 'Inactive' }}
-                </span>
+{# ── KPI カード ── #}
+<div class="dash-kpi-row">
+    <div class="dash-kpi">
+        <span class="dash-kpi__value">{{ item.today_posted }}</span>
+        <span class="dash-kpi__label">本日投稿済み</span>
+    </div>
+    <div class="dash-kpi">
+        <span class="dash-kpi__value dash-kpi__value--accent">{{ item.today_scheduled }}</span>
+        <span class="dash-kpi__label">本日の予約</span>
+    </div>
+    <div class="dash-kpi">
+        <span class="dash-kpi__value">{{ item.scheduled_count }}</span>
+        <span class="dash-kpi__label">予約残り</span>
+    </div>
+    <div class="dash-kpi">
+        <span class="dash-kpi__value">{{ item.total_posts }}</span>
+        <span class="dash-kpi__label">累計投稿</span>
+    </div>
+</div>
+
+{# ── 次の投稿 ── #}
+{% if item.next_post %}
+<div class="dash-next">
+    <span class="dash-next__label">NEXT</span>
+    <span class="dash-next__time">{{ item.next_post.time }}</span>
+    <span class="dash-next__text">{{ item.next_post.text }}...</span>
+</div>
+{% endif %}
+
+{# ── 月間パフォーマンス + 自動リプライ ── #}
+<div class="dash-panels">
+    <div class="dash-panel">
+        <h3 class="dash-panel__title">月間パフォーマンス</h3>
+        <div class="dash-panel__grid">
+            <div class="dash-metric">
+                <span class="dash-metric__value">{{ item.month_likes }}</span>
+                <span class="dash-metric__label">いいね</span>
             </div>
-            <div class="card-body">
-                <p class="username">{{ item.account.x_username }}</p>
-                <div class="stats">
-                    <span>投稿数: <strong>{{ item.total_posts }}</strong></span>
-                    <span>予約中: <strong>{{ item.scheduled_count }}</strong></span>
-                </div>
+            <div class="dash-metric">
+                <span class="dash-metric__value">{{ item.month_impressions }}</span>
+                <span class="dash-metric__label">インプレッション</span>
             </div>
-            <div class="card-actions">
-                <a href="/ui/history?account={{ item.account.account_name }}" class="btn btn-sm">履歴</a>
-                <a href="/ui/scheduled?account={{ item.account.account_name }}" class="btn btn-sm">予約</a>
-                <a href="/ui/analytics?account={{ item.account.account_name }}" class="btn btn-sm">分析</a>
+            <div class="dash-metric">
+                <span class="dash-metric__value">{{ item.month_er }}%</span>
+                <span class="dash-metric__label">平均ER</span>
+            </div>
+            <div class="dash-metric">
+                <span class="dash-metric__value">${{ item.cost_usd }}</span>
+                <span class="dash-metric__label">APIコスト</span>
             </div>
         </div>
-        {% endfor %}
+        {% if item.top_post %}
+        <div class="dash-top">
+            <span class="dash-top__badge">TOP</span>
+            <span class="dash-top__text">{{ item.top_post.text }}...</span>
+            <span class="dash-top__stats">{{ item.top_post.likes }} likes &middot; {{ item.top_post.impressions }} imp</span>
+        </div>
+        {% endif %}
     </div>
-</section>
+
+    <div class="dash-panel">
+        <h3 class="dash-panel__title">自動リプライ</h3>
+        <div class="dash-panel__grid dash-panel__grid--3">
+            <div class="dash-metric">
+                <span class="dash-metric__value {% if item.auto_reply.enabled %}dash-metric__value--on{% else %}dash-metric__value--off{% endif %}">
+                    {{ 'ON' if item.auto_reply.enabled else 'OFF' }}
+                </span>
+                <span class="dash-metric__label">ステータス</span>
+            </div>
+            <div class="dash-metric">
+                <span class="dash-metric__value">{{ item.auto_reply.total_replies }}</span>
+                <span class="dash-metric__label">返信済み</span>
+            </div>
+            <div class="dash-metric">
+                <span class="dash-metric__value dash-metric__value--sm">
+                    {% if item.auto_reply.last_check %}
+                    {{ item.auto_reply.last_check[:16] | replace("T", " ") }}
+                    {% else %}-{% endif %}
+                </span>
+                <span class="dash-metric__label">最終チェック</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# ── クイックリンク ── #}
+<div class="dash-links">
+    <a href="/ui/scheduled?account={{ item.account.account_name }}" class="dash-link">予約一覧</a>
+    <a href="/ui/history?account={{ item.account.account_name }}" class="dash-link">投稿履歴</a>
+    <a href="/ui/analytics?account={{ item.account.account_name }}" class="dash-link">分析</a>
+    <a href="/ui/cost-history?account={{ item.account.account_name }}" class="dash-link">コスト</a>
+</div>
+{% endfor %}
 {% endblock %}

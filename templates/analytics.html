@@ -2,127 +2,107 @@
 {% block title %}分析 - {{ account.display_name }}{% endblock %}
 
 {% block content %}
-<h1>分析 <span class="subtitle">{{ account.display_name }}</span></h1>
+<div class="anl-header">
+    <div>
+        <h1 style="margin-bottom: 0;">分析 <span class="subtitle">{{ account.display_name }}</span></h1>
+    </div>
+    <button id="fetchBtn" class="anl-fetch-btn" onclick="fetchAnalytics()">直近10投稿を分析</button>
+</div>
+<p class="anl-hint" id="fetchStatus">ボタンを押すとX APIから直近10投稿のメトリクスを取得します</p>
 
-<div class="fetch-controls">
-    <button id="fetchBtn" class="btn btn-primary" onclick="fetchAnalytics()">📊 直近10投稿を分析</button>
-    <span id="fetchStatus" class="fetch-status"></span>
-    <p class="fetch-hint">ボタンを押すとX APIから直近10投稿のメトリクスを取得します（手動のみ・自動取得なし）</p>
+{# ── 当月サマリ ── #}
+<div class="dash-kpi-row" style="margin-bottom: 1.5rem;">
+    <div class="dash-kpi">
+        <span class="dash-kpi__value">{{ summary.total_posts }}</span>
+        <span class="dash-kpi__label">投稿数</span>
+    </div>
+    <div class="dash-kpi">
+        <span class="dash-kpi__value">{{ summary.avg_likes_per_post }}</span>
+        <span class="dash-kpi__label">平均いいね</span>
+    </div>
+    <div class="dash-kpi">
+        <span class="dash-kpi__value">{{ summary.avg_impressions_per_post }}</span>
+        <span class="dash-kpi__label">平均インプレッション</span>
+    </div>
+    <div class="dash-kpi">
+        <span class="dash-kpi__value" style="color: var(--success);">{{ summary.avg_engagement_rate }}%</span>
+        <span class="dash-kpi__label">平均ER</span>
+    </div>
 </div>
 
-<section class="section">
-    <h2>当月サマリ</h2>
-    <div class="stats-grid">
-        <div class="stat-card">
-            <span class="stat-value">{{ summary.total_posts }}</span>
-            <span class="stat-label">投稿数</span>
+{# ── トップポスト + チャート ── #}
+<div class="anl-grid">
+    {# 左: トップポスト #}
+    <div class="dash-panel">
+        <h3 class="dash-panel__title">エンゲージメント上位5</h3>
+        {% if summary.best_performing_posts %}
+        <div class="anl-rank-list">
+            {% for p in summary.best_performing_posts %}
+            <div class="anl-rank">
+                <span class="anl-rank__pos">#{{ loop.index }}</span>
+                <span class="anl-rank__id">{{ p.id }}</span>
+                <div class="anl-rank__stats">
+                    <span class="anl-rank__metric">{{ p.likes }} <small>likes</small></span>
+                    <span class="anl-rank__metric">{{ p.impressions }} <small>imp</small></span>
+                    <span class="hist-er">{{ p.engagement_rate }}%</span>
+                </div>
+            </div>
+            {% endfor %}
         </div>
-        <div class="stat-card">
-            <span class="stat-value">{{ summary.avg_likes_per_post }}</span>
-            <span class="stat-label">平均いいね</span>
-        </div>
-        <div class="stat-card">
-            <span class="stat-value">{{ summary.avg_impressions_per_post }}</span>
-            <span class="stat-label">平均インプレッション</span>
-        </div>
-        <div class="stat-card">
-            <span class="stat-value">{{ summary.avg_engagement_rate }}%</span>
-            <span class="stat-label">平均エンゲージメント率</span>
-        </div>
+        {% else %}
+        <p class="anl-empty">データなし</p>
+        {% endif %}
     </div>
-</section>
 
-{% if summary.best_performing_posts %}
-<section class="section">
-    <h2>トップポスト（エンゲージメント上位5）</h2>
-    <div class="table-wrapper">
-        <table class="table">
-            <thead>
-                <tr><th>ID</th><th>いいね</th><th>インプレッション</th><th>エンゲージメント率</th></tr>
-            </thead>
-            <tbody>
-                {% for p in summary.best_performing_posts %}
-                <tr>
-                    <td>{{ p.id }}</td>
-                    <td>{{ p.likes }}</td>
-                    <td>{{ p.impressions }}</td>
-                    <td>{{ p.engagement_rate }}%</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    {# 右: 曜日別投稿頻度 #}
+    <div class="dash-panel">
+        <h3 class="dash-panel__title">曜日別投稿頻度</h3>
+        <div class="anl-chart-wrap">
+            <canvas id="frequencyChart" data-freq="{{ freq_json }}"></canvas>
+        </div>
     </div>
-</section>
-{% endif %}
-
-<section class="section">
-    <h2>曜日別投稿頻度</h2>
-    <div class="chart-container">
-        <canvas id="frequencyChart"></canvas>
-    </div>
-</section>
+</div>
 {% endblock %}
 
 {% block scripts %}
-<style>
-.fetch-controls {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 1.25rem;
-    margin-bottom: 2rem;
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-    flex-wrap: wrap;
-}
-.fetch-hint {
-    width: 100%;
-    color: var(--text-secondary);
-    font-size: 0.8rem;
-    margin-top: 0.25rem;
-}
-.fetch-status {
-    font-size: 0.9rem;
-}
-.fetch-status.loading { color: var(--accent); }
-.fetch-status.success { color: var(--success); }
-.fetch-status.error { color: var(--danger); }
-</style>
 <script>
 async function fetchAnalytics() {
     const btn = document.getElementById('fetchBtn');
     const st = document.getElementById('fetchStatus');
     btn.disabled = true;
-    btn.textContent = '⏳ 取得中...';
+    btn.textContent = '取得中...';
+    btn.classList.add('anl-fetch-btn--loading');
     st.textContent = 'X APIに問い合わせ中...';
-    st.className = 'fetch-status loading';
+    st.classList.add('anl-hint--loading');
 
     try {
         const res = await fetch('/api/analytics/{{ account.account_name }}/fetch', { method: 'POST' });
         const data = await res.json();
         if (res.ok) {
-            st.textContent = `✅ ${data.updated}/${data.total}件 取得完了`;
-            st.className = 'fetch-status success';
+            st.textContent = `${data.updated}/${data.total}件 取得完了`;
+            st.classList.remove('anl-hint--loading');
+            st.classList.add('anl-hint--success');
             if (data.errors && data.errors.length > 0) {
-                st.textContent += `（${data.errors.length}件エラー）`;
+                st.textContent += ` (${data.errors.length}件エラー)`;
             }
-            // 2秒後にリロードして最新データを反映
-            setTimeout(() => location.reload(), 2000);
+            setTimeout(() => location.reload(), 1500);
         } else {
-            st.textContent = '❌ エラー: ' + (data.detail || '不明');
-            st.className = 'fetch-status error';
+            st.textContent = 'エラー: ' + (data.detail || '不明');
+            st.classList.remove('anl-hint--loading');
+            st.classList.add('anl-hint--error');
         }
     } catch (e) {
-        st.textContent = '❌ 通信エラー: ' + e.message;
-        st.className = 'fetch-status error';
+        st.textContent = '通信エラー: ' + e.message;
+        st.classList.remove('anl-hint--loading');
+        st.classList.add('anl-hint--error');
     }
     btn.disabled = false;
-    btn.textContent = '📊 直近10投稿を分析';
+    btn.textContent = '直近10投稿を分析';
+    btn.classList.remove('anl-fetch-btn--loading');
 }
 </script>
 <script>
-const freq = {{ summary.posting_frequency | tojson }};
+var freq = JSON.parse(document.getElementById('frequencyChart').dataset.freq || '{}');
 new Chart(document.getElementById('frequencyChart'), {
     type: 'bar',
     data: {
@@ -130,16 +110,19 @@ new Chart(document.getElementById('frequencyChart'), {
         datasets: [{
             label: '投稿数',
             data: [freq.mon, freq.tue, freq.wed, freq.thu, freq.fri, freq.sat, freq.sun],
-            backgroundColor: 'rgba(29, 155, 240, 0.7)',
+            backgroundColor: 'rgba(29, 155, 240, 0.6)',
+            hoverBackgroundColor: 'rgba(29, 155, 240, 0.85)',
             borderRadius: 6,
+            borderSkipped: false,
         }]
     },
     options: {
         responsive: true,
+        maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
-            y: { beginAtZero: true, ticks: { stepSize: 1, color: '#aaa' }, grid: { color: '#333' } },
-            x: { ticks: { color: '#aaa' }, grid: { display: false } }
+            y: { beginAtZero: true, ticks: { stepSize: 1, color: '#8b949e', font: { size: 11 } }, grid: { color: 'rgba(48,54,61,0.5)', drawBorder: false } },
+            x: { ticks: { color: '#8b949e', font: { size: 12, weight: '500' } }, grid: { display: false } }
         }
     }
 });

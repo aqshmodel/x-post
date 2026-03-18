@@ -231,6 +231,19 @@ def update_monthly_summary(account_name: str) -> MonthlySummary:
         cost_breakdown.media_upload += pc.get("media_upload", 0)
         cost_breakdown.analytics_reads += pc.get("analytics_reads", 0)
         cost_breakdown.deletions += pc.get("deletions", 0)
+
+    # auto_replyコストログを合算
+    daily_dir = get_account_dir(account_name) / "analytics" / "daily"
+    if daily_dir.exists():
+        import glob
+        for cost_file in daily_dir.glob(f"auto_reply_cost_{month_str}-*.json"):
+            try:
+                with open(cost_file, "r", encoding="utf-8") as f:
+                    ar_data = json.load(f)
+                cost_breakdown.auto_reply += ar_data.get("total", 0)
+            except Exception:
+                pass
+
     cost_breakdown.calculate_total()
     cost_summary.total_usd = cost_breakdown.total
     cost_summary.breakdown = cost_breakdown

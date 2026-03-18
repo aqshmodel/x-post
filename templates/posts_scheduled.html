@@ -2,50 +2,55 @@
 {% block title %}予約一覧 - {{ account.display_name }}{% endblock %}
 
 {% block content %}
-<h1>予約一覧 <span class="subtitle">{{ account.display_name }}</span></h1>
-
-{% if posts %}
-<div class="search-bar">
-    <input type="text" id="searchInput" placeholder="テキストで検索..." oninput="filterRows()">
-    <span class="search-count" id="searchCount">{{ posts|length }}件</span>
+<div class="sched-header">
+    <div>
+        <h1 style="margin-bottom: 0;">予約一覧 <span class="subtitle">{{ account.display_name }}</span></h1>
+    </div>
+    {% if posts %}
+    <span class="sched-total">{{ posts|length }}件</span>
+    {% endif %}
 </div>
 
-<div class="table-wrapper">
-    <table class="table" id="postsTable">
-        <thead>
-            <tr>
-                <th>テキスト</th>
-                <th>画像</th>
-                <th>予約時刻</th>
-                <th>ステータス</th>
-                <th>アクション</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for post in posts %}
-            <tr class="post-row">
-                <td class="text-preview">
-                    <a href="/ui/post/scheduled/{{ post.id }}?account={{ account.account_name }}" class="post-link">
-                        {{ post.text[:80] }}{% if post.text|length > 80 %}...{% endif %}
-                    </a>
-                </td>
-                <td>{% if post.media %}{{ post.media|length }}枚{% else %}-{% endif %}</td>
-                <td>{{ post.scheduled_at[:16].replace('T', ' ') if post.scheduled_at else '-' }}</td>
-                <td>
-                    <span class="badge badge-{{ post.status }}">{{ post.status }}</span>
-                    {% if post.error %}<p class="error-text">{{ post.error }}</p>{% endif %}
-                </td>
-                <td>
-                    {% if post.status == 'scheduled' %}
-                    <button class="btn btn-sm btn-danger" onclick="cancelPost('{{ post.id }}')">キャンセル</button>
-                    {% elif post.status == 'failed' %}
-                    <button class="btn btn-sm btn-primary" onclick="retryPost('{{ post.id }}')">リトライ</button>
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+{% if posts %}
+<div class="sched-search">
+    <input type="text" id="searchInput" placeholder="テキストで検索..." oninput="filterCards()">
+</div>
+
+<div class="sched-list" id="schedList">
+    {% for post in posts %}
+    <div class="sched-card post-card" data-text="{{ post.text[:200] | lower }}">
+        <div class="sched-card__body">
+            <div class="sched-card__content">
+                <a href="/ui/post/scheduled/{{ post.id }}?account={{ account.account_name }}" class="sched-card__text">
+                    {{ post.text[:120] }}{% if post.text|length > 120 %}...{% endif %}
+                </a>
+                {% if post.self_reply_text %}
+                <p class="sched-card__reply">↳ {{ post.self_reply_text[:60] }}...</p>
+                {% endif %}
+            </div>
+            <div class="sched-card__meta">
+                <div class="sched-card__time">
+                    <span class="sched-card__date">{{ post.scheduled_at[:10] if post.scheduled_at else '-' }}</span>
+                    <span class="sched-card__hour">{{ post.scheduled_at[11:16].replace('T','') if post.scheduled_at and post.scheduled_at|length > 11 else '' }}</span>
+                </div>
+                {% if post.media %}
+                <span class="sched-card__media">{{ post.media|length }}枚</span>
+                {% endif %}
+                <span class="sched-badge sched-badge--{{ post.status }}">{{ post.status }}</span>
+            </div>
+        </div>
+        <div class="sched-card__actions">
+            {% if post.status == 'scheduled' %}
+            <button class="sched-btn sched-btn--cancel" onclick="cancelPost('{{ post.id }}')">キャンセル</button>
+            {% elif post.status == 'failed' %}
+            <button class="sched-btn sched-btn--retry" onclick="retryPost('{{ post.id }}')">リトライ</button>
+            {% endif %}
+            {% if post.error %}
+            <span class="sched-card__error">{{ post.error }}</span>
+            {% endif %}
+        </div>
+    </div>
+    {% endfor %}
 </div>
 {% else %}
 <p class="empty-state">予約中の投稿はありません</p>
@@ -53,44 +58,13 @@
 {% endblock %}
 
 {% block scripts %}
-<style>
-.search-bar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 1rem;
-}
-.search-bar input {
-    flex: 1;
-    padding: 10px 14px;
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    color: var(--text-primary);
-    font-size: 0.95rem;
-}
-.search-bar input:focus {
-    outline: none;
-    border-color: var(--accent);
-}
-.search-count {
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    white-space: nowrap;
-}
-</style>
 <script>
-function filterRows() {
+function filterCards() {
     const q = document.getElementById('searchInput').value.toLowerCase();
-    const rows = document.querySelectorAll('#postsTable .post-row');
-    let visible = 0;
-    rows.forEach(row => {
-        const text = row.querySelector('.text-preview').textContent.toLowerCase();
-        const match = text.includes(q);
-        row.style.display = match ? '' : 'none';
-        if (match) visible++;
+    document.querySelectorAll('#schedList .post-card').forEach(card => {
+        const text = card.dataset.text;
+        card.style.display = text.includes(q) ? '' : 'none';
     });
-    document.getElementById('searchCount').textContent = visible + '件';
 }
 async function cancelPost(postId) {
     if (!confirm('予約をキャンセルしますか？')) return;

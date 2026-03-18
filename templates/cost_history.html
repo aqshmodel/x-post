@@ -2,98 +2,162 @@
 {% block title %}コスト履歴 - {{ account.display_name }}{% endblock %}
 
 {% block content %}
-<h1>コスト履歴 <span class="subtitle">{{ account.display_name }}</span></h1>
+<div class="page-header">
+    <h1 style="margin-bottom: 0;">コスト履歴 <span class="subtitle">{{ account.display_name }}</span></h1>
+</div>
 
-<section class="section">
-    <h2>当月</h2>
-    <div class="stats-grid">
-        <div class="stat-card">
-            <span class="stat-value">${{ current_summary.api_cost.total_usd }}</span>
-            <span class="stat-label">USD</span>
-        </div>
-        <div class="stat-card">
-            <span class="stat-value">¥{{ current_summary.api_cost.total_jpy_approx }}</span>
-            <span class="stat-label">JPY (概算)</span>
-        </div>
-        <div class="stat-card">
-            <span class="stat-value">{{ current_summary.total_posts }}</span>
-            <span class="stat-label">投稿数</span>
+{# ── 当月 KPI ── #}
+<div class="dash-kpi-row" style="margin-bottom: 1.5rem;">
+    <div class="dash-kpi">
+        <span class="dash-kpi__value">${{ current_summary.api_cost.total_usd }}</span>
+        <span class="dash-kpi__label">USD</span>
+    </div>
+    <div class="dash-kpi">
+        <span class="dash-kpi__value">¥{{ current_summary.api_cost.total_jpy_approx }}</span>
+        <span class="dash-kpi__label">JPY（概算）</span>
+    </div>
+    <div class="dash-kpi">
+        <span class="dash-kpi__value">{{ current_summary.total_posts }}</span>
+        <span class="dash-kpi__label">投稿数</span>
+    </div>
+</div>
+
+{# ── コスト内訳 + チャート ── #}
+<div class="anl-grid">
+    {# 左: 内訳 #}
+    {% if current_summary.api_cost.breakdown %}
+    <div class="dash-panel">
+        <h3 class="dash-panel__title">コスト内訳（当月）</h3>
+        <div class="cost-breakdown">
+            <div class="cost-row">
+                <span class="cost-row__label">投稿作成</span>
+                <span class="cost-row__bar">
+                    <span class="cost-row__fill" data-width="{{ bar_widths.post }}"></span>
+                </span>
+                <span class="cost-row__val">${{ current_summary.api_cost.breakdown.post }}</span>
+            </div>
+            <div class="cost-row">
+                <span class="cost-row__label">メディア</span>
+                <span class="cost-row__bar">
+                    <span class="cost-row__fill" data-width="{{ bar_widths.media_upload }}"></span>
+                </span>
+                <span class="cost-row__val">${{ current_summary.api_cost.breakdown.media_upload }}</span>
+            </div>
+            <div class="cost-row">
+                <span class="cost-row__label">分析取得</span>
+                <span class="cost-row__bar">
+                    <span class="cost-row__fill" data-width="{{ bar_widths.analytics_reads }}"></span>
+                </span>
+                <span class="cost-row__val">${{ current_summary.api_cost.breakdown.analytics_reads }}</span>
+            </div>
+            <div class="cost-row">
+                <span class="cost-row__label">自動リプライ</span>
+                <span class="cost-row__bar">
+                    <span class="cost-row__fill cost-row__fill--accent" data-width="{{ bar_widths.auto_reply }}"></span>
+                </span>
+                <span class="cost-row__val">${{ current_summary.api_cost.breakdown.auto_reply }}</span>
+            </div>
+            <div class="cost-row">
+                <span class="cost-row__label">削除</span>
+                <span class="cost-row__bar">
+                    <span class="cost-row__fill" data-width="{{ bar_widths.deletions }}"></span>
+                </span>
+                <span class="cost-row__val">${{ current_summary.api_cost.breakdown.deletions }}</span>
+            </div>
+            <div class="cost-row cost-row--total">
+                <span class="cost-row__label">合計</span>
+                <span></span>
+                <span class="cost-row__val">${{ current_summary.api_cost.breakdown.total }}</span>
+            </div>
         </div>
     </div>
-</section>
+    {% endif %}
 
+    {# 右: チャート or 空メッセージ #}
+    {% if archives %}
+    <div class="dash-panel">
+        <h3 class="dash-panel__title">月別コスト推移</h3>
+        <div class="anl-chart-wrap">
+            <canvas id="costChart" data-archives="{{ archives_json }}"></canvas>
+        </div>
+    </div>
+    {% else %}
+    <div class="dash-panel">
+        <h3 class="dash-panel__title">月別コスト推移</h3>
+        <p class="anl-empty">来月からデータが蓄積されます</p>
+    </div>
+    {% endif %}
+</div>
+
+{# ── 月別一覧 ── #}
 {% if archives %}
-<section class="section">
-    <h2>月別コスト推移</h2>
-    <div class="chart-container">
-        <canvas id="costChart"></canvas>
+<div class="dash-panel" style="margin-top: 1rem;">
+    <h3 class="dash-panel__title">月別一覧</h3>
+    <div class="cost-breakdown">
+        <div class="cost-row cost-row--header">
+            <span class="cost-row__label">月</span>
+            <span class="cost-row__val">投稿数</span>
+            <span class="cost-row__val">USD</span>
+            <span class="cost-row__val">JPY</span>
+        </div>
+        {% for a in archives %}
+        <div class="cost-row">
+            <span class="cost-row__label">{{ a.month }}</span>
+            <span class="cost-row__val">{{ a.total_posts }}</span>
+            <span class="cost-row__val">${{ a.api_cost.total_usd if a.api_cost else 0 }}</span>
+            <span class="cost-row__val">¥{{ a.api_cost.total_jpy_approx if a.api_cost else 0 }}</span>
+        </div>
+        {% endfor %}
     </div>
-</section>
-
-<section class="section">
-    <h2>月別一覧</h2>
-    <div class="table-wrapper">
-        <table class="table">
-            <thead>
-                <tr><th>月</th><th>投稿数</th><th>コスト (USD)</th><th>コスト (JPY)</th></tr>
-            </thead>
-            <tbody>
-                {% for a in archives %}
-                <tr>
-                    <td>{{ a.month }}</td>
-                    <td>{{ a.total_posts }}</td>
-                    <td>${{ a.api_cost.total_usd if a.api_cost else 0 }}</td>
-                    <td>¥{{ a.api_cost.total_jpy_approx if a.api_cost else 0 }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</section>
-{% else %}
-<p class="empty-state">過去のコスト履歴はまだありません</p>
+</div>
 {% endif %}
 {% endblock %}
 
 {% block scripts %}
+<script>
+document.querySelectorAll('.cost-row__fill[data-width]').forEach(function(el) {
+    el.style.width = el.dataset.width + '%';
+});
+</script>
 {% if archives %}
 <script>
-const archiveData = {{ archives | tojson }};
-const months = archiveData.map(a => a.month);
-const costs = archiveData.map(a => a.api_cost ? a.api_cost.total_usd : 0);
-const posts = archiveData.map(a => a.total_posts);
-
+var archiveData = JSON.parse(document.getElementById('costChart').dataset.archives || '[]');
 new Chart(document.getElementById('costChart'), {
     type: 'bar',
     data: {
-        labels: months,
+        labels: archiveData.map(a => a.month),
         datasets: [
             {
                 label: 'コスト ($)',
-                data: costs,
-                backgroundColor: 'rgba(255, 107, 107, 0.7)',
+                data: archiveData.map(a => a.api_cost ? a.api_cost.total_usd : 0),
+                backgroundColor: 'rgba(248, 81, 73, 0.5)',
+                hoverBackgroundColor: 'rgba(248, 81, 73, 0.8)',
                 borderRadius: 6,
+                borderSkipped: false,
                 yAxisID: 'y',
             },
             {
                 label: '投稿数',
-                data: posts,
+                data: archiveData.map(a => a.total_posts),
                 type: 'line',
-                borderColor: 'rgba(29, 155, 240, 1)',
-                backgroundColor: 'rgba(29, 155, 240, 0.1)',
+                borderColor: 'rgba(29, 155, 240, 0.8)',
+                backgroundColor: 'rgba(29, 155, 240, 0.05)',
+                pointBackgroundColor: 'rgba(29, 155, 240, 1)',
                 tension: 0.3,
+                fill: true,
                 yAxisID: 'y1',
             }
         ]
     },
     options: {
         responsive: true,
+        maintainAspectRatio: false,
         scales: {
-            y: { position: 'left', beginAtZero: true, ticks: { color: '#aaa' }, grid: { color: '#333' } },
-            y1: { position: 'right', beginAtZero: true, ticks: { color: '#aaa' }, grid: { display: false } },
-            x: { ticks: { color: '#aaa' }, grid: { display: false } }
+            y: { position: 'left', beginAtZero: true, ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: 'rgba(48,54,61,0.5)', drawBorder: false } },
+            y1: { position: 'right', beginAtZero: true, ticks: { color: '#8b949e', font: { size: 11 } }, grid: { display: false } },
+            x: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { display: false } }
         },
-        plugins: { legend: { labels: { color: '#ccc' } } }
+        plugins: { legend: { labels: { color: '#8b949e', font: { size: 11 } } } }
     }
 });
 </script>

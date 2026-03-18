@@ -3,6 +3,8 @@ X投稿システム FastAPIサーバー
 仕様: docs/仕様/05_予約投稿.md, 08_管理UI.md
 """
 
+import json
+
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -389,11 +391,84 @@ async def ui_dashboard(request: Request):
             acc = load_account(name)
             posted = list_posts(name, "posted")
             scheduled = list_posts(name, "scheduled")
+            now = datetime.now()
+            today_str = now.strftime("%Y-%m-%d")
+
+            # --- 次の予約投稿 ---
+            next_post = None
+            now_iso = now.isoformat()
+            for s in sorted(scheduled, key=lambda p: (p.get("scheduled_at", "") or "").replace("T", " ")):
+                sa = (s.get("scheduled_at", "") or "").replace("T", " ")
+                if sa > now_iso.replace("T", " "):
+                    next_post = {"time": sa, "text": (s.get("text", "") or "")[:40]}
+                    break
+
+            # --- 本日の投稿数 / 本日の残り予約数 ---
+            today_posted = [p for p in posted if (p.get("posted_at", "") or "").startswith(today_str)]
+            today_scheduled = [s for s in scheduled if today_str in (s.get("id", "") or s.get("scheduled_at", ""))]
+
+            # --- 月間パフォーマンス ---
+            month_str = now.strftime("%Y-%m")
+            month_posts = [p for p in posted if (p.get("posted_at", "") or "").startswith(month_str)]
+            total_likes = sum(p.get("analytics", {}).get("likes", 0) for p in month_posts)
+            total_impressions = sum(p.get("analytics", {}).get("impressions", 0) for p in month_posts)
+            rates = [p.get("analytics", {}).get("engagement_rate", 0) for p in month_posts if p.get("analytics", {}).get("impressions", 0) > 0]
+            avg_er = round(sum(rates) / len(rates), 1) if rates else 0.0
+
+            # --- トップ投稿（いいね数1位） ---
+            top_post = None
+            if month_posts:
+                best = max(month_posts, key=lambda p: p.get("analytics", {}).get("likes", 0))
+                if best.get("analytics", {}).get("likes", 0) > 0:
+                    top_post = {
+                        "text": (best.get("text", "") or "")[:50],
+                        "likes": best["analytics"]["likes"],
+                        "impressions": best["analytics"].get("impressions", 0),
+                    }
+
+            # --- auto_reply ステータス ---
+            auto_reply_status = {"enabled": False, "last_check": None, "total_replies": 0}
+            config_path = get_account_dir(name) / "config.json"
+            try:
+                with open(config_path, "r", encoding="utf-8") as f:
+                    cfg = json.load(f)
+                auto_reply_status["enabled"] = cfg.get("auto_reply", {}).get("enabled", False)
+            except Exception:
+                pass
+            ar_state_path = get_account_dir(name) / "logs" / "auto_reply_state.json"
+            if ar_state_path.exists():
+                try:
+                    with open(ar_state_path, "r", encoding="utf-8") as f:
+                        ar_state = json.load(f)
+                    auto_reply_status["last_check"] = ar_state.get("updated_at")
+                    auto_reply_status["total_replies"] = len(ar_state.get("replied_ids", []))
+                except Exception:
+                    pass
+
+            # --- コスト概要 ---
+            summary_path = get_account_dir(name) / "analytics" / "summary.json"
+            cost_usd = 0.0
+            if summary_path.exists():
+                try:
+                    with open(summary_path, "r", encoding="utf-8") as f:
+                        summary = json.load(f)
+                    cost_usd = summary.get("api_cost", {}).get("total_usd", 0)
+                except Exception:
+                    pass
+
             accounts.append({
                 "account": acc,
                 "total_posts": len(posted),
                 "scheduled_count": len(scheduled),
-                "recent_posts": posted[:3],
+                "today_posted": len(today_posted),
+                "today_scheduled": len(today_scheduled),
+                "next_post": next_post,
+                "month_likes": total_likes,
+                "month_impressions": total_impressions,
+                "month_er": avg_er,
+                "top_post": top_post,
+                "auto_reply": auto_reply_status,
+                "cost_usd": cost_usd,
             })
         except Exception:
             pass
@@ -464,10 +539,13 @@ async def ui_analytics(request: Request, account: str = Query(...)):
     """分析ページ"""
     acc = load_account(account)
     summary = update_monthly_summary(account)
+    summary_dict = summary.model_dump()
+    freq_json = json.dumps(summary_dict.get("posting_frequency", {}))
     return templates.TemplateResponse("analytics.html", {
         "request": request,
         "account": acc,
-        "summary": summary.model_dump(),
+        "summary": summary_dict,
+        "freq_json": freq_json,
         "accounts_list": list_accounts(),
         "current_page": "analytics",
         "current_account": account,
@@ -485,11 +563,26 @@ async def ui_cost_history(request: Request, account: str = Query(...)):
         if data:
             archives.append(data)
     current = update_monthly_summary(account)
+    current_dict = current.model_dump()
+
+    # バー幅をPython側で計算
+    bd = (current_dict.get("api_cost") or {}).get("breakdown") or {}
+    total_cost = bd.get("total", 0) or 1
+    bar_widths = {
+        "post": round((bd.get("post", 0) / total_cost) * 100),
+        "media_upload": round((bd.get("media_upload", 0) / total_cost) * 100),
+        "analytics_reads": round((bd.get("analytics_reads", 0) / total_cost) * 100),
+        "auto_reply": round((bd.get("auto_reply", 0) / total_cost) * 100),
+        "deletions": round((bd.get("deletions", 0) / total_cost) * 100),
+    }
+
     return templates.TemplateResponse("cost_history.html", {
         "request": request,
         "account": acc,
-        "current_summary": current.model_dump(),
+        "current_summary": current_dict,
+        "bar_widths": bar_widths,
         "archives": archives,
+        "archives_json": json.dumps(archives, default=str),
         "accounts_list": list_accounts(),
         "current_page": "cost-history",
         "current_account": account,
