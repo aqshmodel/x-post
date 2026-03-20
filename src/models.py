@@ -89,6 +89,7 @@ class Post(BaseModel):
     media_ids: list[str] = Field(default_factory=list)
     thread: list[str] = Field(default_factory=list)
     thread_position: Optional[int] = None
+    self_reply_text: Optional[str] = None
     scheduled_at: Optional[datetime] = None
     status: PostStatus = PostStatus.DRAFT
     x_post_id: Optional[str] = None
@@ -177,6 +178,7 @@ class PublishRequest(BaseModel):
     text: str
     media: list[str] = Field(default_factory=list)
     auto_thread: bool = False
+    self_reply_text: Optional[str] = None
 
 
 class ScheduleRequest(BaseModel):
@@ -185,6 +187,7 @@ class ScheduleRequest(BaseModel):
     text: str
     media: list[str] = Field(default_factory=list)
     scheduled_at: datetime
+    self_reply_text: Optional[str] = None
 
 
 class ThreadRequest(BaseModel):

@@ -78,9 +78,12 @@
                     <div class="tweet-username">{{ account.x_username }}</div>
                 </div>
             </div>
-            <div class="tweet-body">
-                【無料】性格＆適性診断はこちら👇<br>
-                <a href="https://prisma.aqsh.co.jp/" class="tweet-link">prisma.aqsh.co.jp</a>
+            <div class="tweet-body reply-body">
+                {%- if post.self_reply_text -%}
+                {{ post.self_reply_text | replace('\n', '<br>') | safe }}
+                {%- else -%}
+                {{ account.self_reply_text | default('【無料】性格＆適性診断はこちら\nhttps://prisma.aqsh.co.jp/', true) | replace('\n', '<br>') | safe }}
+                {%- endif -%}
             </div>
         </div>
 

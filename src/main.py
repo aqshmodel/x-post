@@ -210,6 +210,7 @@ async def api_publish(req: PublishRequest):
         account=req.account,
         text=req.text,
         media=req.media,
+        self_reply_text=req.self_reply_text,
         status=PostStatus.DRAFT,
     )
 
@@ -243,6 +244,7 @@ async def api_schedule(req: ScheduleRequest):
         account=req.account,
         text=req.text,
         media=req.media,
+        self_reply_text=req.self_reply_text,
         status=PostStatus.SCHEDULED,
         scheduled_at=req.scheduled_at,
     )
