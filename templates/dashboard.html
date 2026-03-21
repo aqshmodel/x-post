@@ -122,7 +122,7 @@
                 <span class="rate-gauge__nums">{{ info.remaining }}/{{ info.limit }}</span>
             </div>
             <div class="rate-gauge__bar">
-                <div class="rate-gauge__fill rate-gauge__fill--{{ info.status }}" style="width: {{ info.percentage }}%"></div>
+                <div class="rate-gauge__fill rate-gauge__fill--{{ info.status }}" data-width="{{ info.percentage }}" style="width: 0%"></div>
             </div>
             {% if info.reset_in %}
             <span class="rate-gauge__reset">リセット: {{ info.reset_in }}秒</span>
@@ -144,7 +144,7 @@
         {% endif %}
     </h3>
     <div style="height: 200px;">
-        <canvas id="followersChart_{{ loop.index }}"></canvas>
+        <canvas class="js-followers-chart" data-chart='{{ item.followers.history_7d | tojson }}'></canvas>
     </div>
 </div>
 {% endif %}
@@ -161,48 +161,47 @@
 
 {% block scripts %}
 <script>
-{% for item in accounts %}
-{% if item.followers.history_7d %}
-(function() {
-    var data = {{ item.followers.history_7d | tojson }};
+/* レートゲージの幅を適用 */
+document.querySelectorAll('.rate-gauge__fill[data-width]').forEach(function(el) {
+    el.style.width = el.dataset.width + '%';
+});
+
+/* フォロワー推移チャート */
+document.querySelectorAll('.js-followers-chart').forEach(function(canvas) {
+    var data = JSON.parse(canvas.dataset.chart);
     var labels = data.map(function(d) { return d.date.substring(5); });
     var values = data.map(function(d) { return d.followers; });
-    var ctx = document.getElementById('followersChart_{{ loop.index }}');
-    if (ctx) {
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'フォロワー',
-                    data: values,
-                    borderColor: '#1d9bf0',
-                    backgroundColor: 'rgba(29,155,240,0.1)',
-                    fill: true,
-                    tension: 0.3,
-                    pointRadius: 4,
-                    pointBackgroundColor: '#1d9bf0',
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: { legend: { display: false } },
-                scales: {
-                    y: {
-                        grid: { color: 'rgba(255,255,255,0.06)' },
-                        ticks: { color: '#8b949e' }
-                    },
-                    x: {
-                        grid: { display: false },
-                        ticks: { color: '#8b949e' }
-                    }
+    new Chart(canvas, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'フォロワー',
+                data: values,
+                borderColor: '#1d9bf0',
+                backgroundColor: 'rgba(29,155,240,0.1)',
+                fill: true,
+                tension: 0.3,
+                pointRadius: 4,
+                pointBackgroundColor: '#1d9bf0'
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: {
+                    grid: { color: 'rgba(255,255,255,0.06)' },
+                    ticks: { color: '#8b949e' }
+                },
+                x: {
+                    grid: { display: false },
+                    ticks: { color: '#8b949e' }
                 }
             }
-        });
-    }
-})();
-{% endif %}
-{% endfor %}
+        }
+    });
+});
 </script>
 {% endblock %}
