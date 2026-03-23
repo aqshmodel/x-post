@@ -7,18 +7,18 @@
 </div>
 
 {# ── 当月 KPI ── #}
-<div class="dash-kpi-row" style="margin-bottom: 1.5rem;">
-    <div class="dash-kpi">
-        <span class="dash-kpi__value">${{ current_summary.api_cost.total_usd }}</span>
-        <span class="dash-kpi__label">USD</span>
+<div class="cost-kpi-row">
+    <div class="cost-kpi cost-kpi--main">
+        <span class="cost-kpi__value">¥{{ current_summary.api_cost.total_jpy_approx }}</span>
+        <span class="cost-kpi__label">当月コスト（税込概算）</span>
     </div>
-    <div class="dash-kpi">
-        <span class="dash-kpi__value">¥{{ current_summary.api_cost.total_jpy_approx }}</span>
-        <span class="dash-kpi__label">JPY（概算）</span>
+    <div class="cost-kpi">
+        <span class="cost-kpi__value cost-kpi__value--sub">${{ current_summary.api_cost.total_usd }}</span>
+        <span class="cost-kpi__label">USD（API原価）</span>
     </div>
-    <div class="dash-kpi">
-        <span class="dash-kpi__value">{{ current_summary.total_posts }}</span>
-        <span class="dash-kpi__label">投稿数</span>
+    <div class="cost-kpi">
+        <span class="cost-kpi__value cost-kpi__value--sub">{{ current_summary.total_posts }}</span>
+        <span class="cost-kpi__label">投稿数</span>
     </div>
 </div>
 
@@ -29,47 +29,50 @@
     <div class="dash-panel">
         <h3 class="dash-panel__title">コスト内訳（当月）</h3>
         <div class="cost-breakdown">
-            <div class="cost-row">
-                <span class="cost-row__label">投稿作成</span>
-                <span class="cost-row__bar">
-                    <span class="cost-row__fill" data-width="{{ bar_widths.post }}"></span>
+            {% set bd = current_summary.api_cost.breakdown %}
+            {% set rate = 160 %}
+            <div class="cost-detail-row">
+                <span class="cost-detail-row__label">投稿作成</span>
+                <span class="cost-detail-row__bar">
+                    <span class="cost-detail-row__fill" data-width="{{ bar_widths.post }}"></span>
                 </span>
-                <span class="cost-row__val">${{ current_summary.api_cost.breakdown.post }}</span>
+                <span class="cost-detail-row__val">¥{{ (bd.post * rate)|round|int }}</span>
             </div>
-            <div class="cost-row">
-                <span class="cost-row__label">メディア</span>
-                <span class="cost-row__bar">
-                    <span class="cost-row__fill" data-width="{{ bar_widths.media_upload }}"></span>
+            <div class="cost-detail-row">
+                <span class="cost-detail-row__label">メディア</span>
+                <span class="cost-detail-row__bar">
+                    <span class="cost-detail-row__fill" data-width="{{ bar_widths.media_upload }}"></span>
                 </span>
-                <span class="cost-row__val">${{ current_summary.api_cost.breakdown.media_upload }}</span>
+                <span class="cost-detail-row__val">¥{{ (bd.media_upload * rate)|round|int }}</span>
             </div>
-            <div class="cost-row">
-                <span class="cost-row__label">分析取得</span>
-                <span class="cost-row__bar">
-                    <span class="cost-row__fill" data-width="{{ bar_widths.analytics_reads }}"></span>
+            <div class="cost-detail-row">
+                <span class="cost-detail-row__label">分析取得</span>
+                <span class="cost-detail-row__bar">
+                    <span class="cost-detail-row__fill cost-detail-row__fill--info" data-width="{{ bar_widths.analytics_reads }}"></span>
                 </span>
-                <span class="cost-row__val">${{ current_summary.api_cost.breakdown.analytics_reads }}</span>
+                <span class="cost-detail-row__val">¥{{ (bd.analytics_reads * rate)|round|int }}</span>
             </div>
-            <div class="cost-row">
-                <span class="cost-row__label">自動リプライ</span>
-                <span class="cost-row__bar">
-                    <span class="cost-row__fill cost-row__fill--accent" data-width="{{ bar_widths.auto_reply }}"></span>
+            <div class="cost-detail-row">
+                <span class="cost-detail-row__label">自動リプライ</span>
+                <span class="cost-detail-row__bar">
+                    <span class="cost-detail-row__fill cost-detail-row__fill--accent" data-width="{{ bar_widths.auto_reply }}"></span>
                 </span>
-                <span class="cost-row__val">${{ current_summary.api_cost.breakdown.auto_reply }}</span>
+                <span class="cost-detail-row__val">¥{{ (bd.auto_reply * rate)|round|int }}</span>
             </div>
-            <div class="cost-row">
-                <span class="cost-row__label">削除</span>
-                <span class="cost-row__bar">
-                    <span class="cost-row__fill" data-width="{{ bar_widths.deletions }}"></span>
+            <div class="cost-detail-row">
+                <span class="cost-detail-row__label">削除</span>
+                <span class="cost-detail-row__bar">
+                    <span class="cost-detail-row__fill" data-width="{{ bar_widths.deletions }}"></span>
                 </span>
-                <span class="cost-row__val">${{ current_summary.api_cost.breakdown.deletions }}</span>
+                <span class="cost-detail-row__val">¥{{ (bd.deletions * rate)|round|int }}</span>
             </div>
-            <div class="cost-row cost-row--total">
-                <span class="cost-row__label">合計</span>
+            <div class="cost-detail-row cost-detail-row--total">
+                <span class="cost-detail-row__label">合計</span>
                 <span></span>
-                <span class="cost-row__val">${{ current_summary.api_cost.breakdown.total }}</span>
+                <span class="cost-detail-row__val">¥{{ current_summary.api_cost.total_jpy_approx }}</span>
             </div>
         </div>
+        <p class="cost-note">※ $1 = ¥{{ rate }} で概算</p>
     </div>
     {% endif %}
 
@@ -97,15 +100,15 @@
         <div class="cost-row cost-row--header">
             <span class="cost-row__label">月</span>
             <span class="cost-row__val">投稿数</span>
-            <span class="cost-row__val">USD</span>
             <span class="cost-row__val">JPY</span>
+            <span class="cost-row__val">USD</span>
         </div>
         {% for a in archives %}
         <div class="cost-row">
             <span class="cost-row__label">{{ a.month }}</span>
             <span class="cost-row__val">{{ a.total_posts }}</span>
-            <span class="cost-row__val">${{ a.api_cost.total_usd if a.api_cost else 0 }}</span>
             <span class="cost-row__val">¥{{ a.api_cost.total_jpy_approx if a.api_cost else 0 }}</span>
+            <span class="cost-row__val cost-row__val--sub">${{ a.api_cost.total_usd if a.api_cost else 0 }}</span>
         </div>
         {% endfor %}
     </div>
@@ -115,7 +118,7 @@
 
 {% block scripts %}
 <script>
-document.querySelectorAll('.cost-row__fill[data-width]').forEach(function(el) {
+document.querySelectorAll('.cost-detail-row__fill[data-width]').forEach(function(el) {
     el.style.width = el.dataset.width + '%';
 });
 </script>
@@ -128,8 +131,8 @@ new Chart(document.getElementById('costChart'), {
         labels: archiveData.map(a => a.month),
         datasets: [
             {
-                label: 'コスト ($)',
-                data: archiveData.map(a => a.api_cost ? a.api_cost.total_usd : 0),
+                label: 'コスト (¥)',
+                data: archiveData.map(a => a.api_cost ? a.api_cost.total_jpy_approx : 0),
                 backgroundColor: 'rgba(248, 81, 73, 0.5)',
                 hoverBackgroundColor: 'rgba(248, 81, 73, 0.8)',
                 borderRadius: 6,
@@ -153,7 +156,7 @@ new Chart(document.getElementById('costChart'), {
         responsive: true,
         maintainAspectRatio: false,
         scales: {
-            y: { position: 'left', beginAtZero: true, ticks: { color: '#8b949e', font: { size: 11 } }, grid: { color: 'rgba(48,54,61,0.5)', drawBorder: false } },
+            y: { position: 'left', beginAtZero: true, ticks: { color: '#8b949e', font: { size: 11 }, callback: v => '¥' + v }, grid: { color: 'rgba(48,54,61,0.5)', drawBorder: false } },
             y1: { position: 'right', beginAtZero: true, ticks: { color: '#8b949e', font: { size: 11 } }, grid: { display: false } },
             x: { ticks: { color: '#8b949e', font: { size: 11 } }, grid: { display: false } }
         },
